@@ -1,6 +1,4 @@
-mport { useState, useCallback, useRef } from "react";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ComposedChart } from "recharts";
 // ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
  bg: "#F7F8FA", surface: "#FFFFFF", navy: "#1B2A4A", navyLight: "#2C3E5D",
