@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from "react";
 import { BarChart, Bar, ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const C = {
@@ -803,4 +803,3 @@ function Toast({msg,type}){
  const bg=type==="success"?C.mint:type==="error"?C.coral:C.navy;
  return <div style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:bg,color:"#fff",padding:"12px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(0,0,0,0.18)",whiteSpace:"nowrap"}}>{msg}</div>;
 }
-
