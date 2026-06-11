@@ -137,6 +137,8 @@ function Sidebar({tab,setTab,onLogout}){
 // ── DIARY ──────────────────────────────────────────────────────────────────────
 function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,showToast}){
  const [wo,setWo] = useState(0);
+ const [showAdd,setShowAdd] = useState(false);
+ const [bForm,setBForm] = useState({propertyId:"",guest:"",checkin:"",checkout:""});
  const ws = new Date(today);
  ws.setDate(today.getDate()-today.getDay()+1+wo*7);
  const days = Array.from({length:7},(_,i)=>{ const d=new Date(ws); d.setDate(ws.getDate()+i); return d; });
@@ -173,6 +175,7 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
        <Btn onClick={()=>setWo(w=>w-1)} secondary small>←</Btn>
        <Btn onClick={()=>setWo(0)} secondary small>Today</Btn>
        <Btn onClick={()=>setWo(w=>w+1)} secondary small>→</Btn>
+       <Btn onClick={()=>setShowAdd(true)}>+ Booking</Btn>
      </div>
    </div>
 
@@ -238,6 +241,32 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
        </Card>;
      })}
    </div>
+   {showAdd && <Modal onClose={()=>setShowAdd(false)} title="Add booking">
+     <div>
+       <div style={{marginBottom:12}}>
+         <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Property</label>
+         <select value={bForm.propertyId} onChange={e=>setBForm(f=>({...f,propertyId:e.target.value}))} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.bg}}>
+           <option value="">Select property...</option>
+           {properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+         </select>
+       </div>
+       <Field label="Guest name" value={bForm.guest} onChange={v=>setBForm(f=>({...f,guest:v}))} placeholder="e.g. John Smith"/>
+       <Field label="Check-in date" value={bForm.checkin} onChange={v=>setBForm(f=>({...f,checkin:v}))} placeholder="YYYY-MM-DD" type="date"/>
+       <Field label="Checkout date" value={bForm.checkout} onChange={v=>setBForm(f=>({...f,checkout:v}))} placeholder="YYYY-MM-DD" type="date"/>
+       <div style={{display:"flex",gap:10,marginTop:16}}>
+         <Btn onClick={()=>{
+           if(!bForm.propertyId||!bForm.guest||!bForm.checkin||!bForm.checkout)return;
+           const cin=new Date(bForm.checkin); cin.setHours(15,0,0,0);
+           const cout=new Date(bForm.checkout); cout.setHours(11,0,0,0);
+           setBookings(bs=>[...bs,{id:"b"+Date.now(),propertyId:bForm.propertyId,guest:bForm.guest,checkin:cin,checkout:cout,notified:false}]);
+           setBForm({propertyId:"",guest:"",checkin:"",checkout:""});
+           setShowAdd(false);
+           showToast("Booking added");
+         }}>Add booking</Btn>
+         <Btn onClick={()=>setShowAdd(false)} secondary>Cancel</Btn>
+       </div>
+     </div>
+   </Modal>}
  </div>;
 }
 
