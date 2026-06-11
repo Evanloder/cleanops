@@ -146,8 +146,16 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
 
  function notify(b){
    const p = properties.find(x=>x.id===b.propertyId);
+   const assigned = cleaners.filter(c=>c.assignedProperties?.includes(b.propertyId));
+   const msg = encodeURIComponent("Hi, just a reminder that there is a checkout at "+( p?.name||"the property")+" on "+fmt(b.checkout)+". Please can you go in and clean as soon as possible. Thanks");
+   if(assigned.length>0){
+     const phone = assigned[0].phone.replace(/\s/g,"");
+     window.open("sms:"+phone+"?body="+msg,"_self");
+   } else {
+     window.open("sms:?body="+msg,"_self");
+   }
    setBookings(bs=>bs.map(x=>x.id===b.id?{...x,notified:true}:x));
-   showToast("Cleaners notified for "+p?.name);
+   showToast("Opening Messages...");
  }
 
  function schedClean(b){
