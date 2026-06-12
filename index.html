@@ -11,46 +11,61 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,sans-serif;background:#F7F8FA;color:#1B2A4A}
 button{cursor:pointer;font-family:inherit}
-input,select{font-family:inherit}
+input,select,textarea{font-family:inherit}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState} = React;
+const {useState,useEffect} = React;
 
-const C = {
- bg:"#F7F8FA", surface:"#FFFFFF", navy:"#1B2A4A", coral:"#E8614A",
- mint:"#2ECC9A", amber:"#F0A500", muted:"#8A94A6", border:"#E4E8F0",
- text:"#1B2A4A", textSoft:"#5A6478"
-};
+const C={bg:"#F7F8FA",surface:"#FFFFFF",navy:"#1B2A4A",coral:"#E8614A",mint:"#2ECC9A",amber:"#F0A500",muted:"#8A94A6",border:"#E4E8F0",text:"#1B2A4A",textSoft:"#5A6478"};
+const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const today=new Date();
+const fmt=dt=>new Date(dt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
+const fmtS=dt=>new Date(dt).toLocaleDateString("en-GB",{day:"numeric",month:"short"});
+const sameDay=(a,b)=>{const x=new Date(a),y=new Date(b);return x.getDate()===y.getDate()&&x.getMonth()===y.getMonth()&&x.getFullYear()===y.getFullYear();};
+const isToday=dt=>sameDay(dt,today);
+const gbp=v=>"£"+Number(v||0).toLocaleString("en-GB",{minimumFractionDigits:0,maximumFractionDigits:0});
+const dd=(n,h=11)=>{const d=new Date(today);d.setDate(d.getDate()+n);d.setHours(h,0,0,0);return d;};
 
-const today = new Date();
-const fmt = dt => dt.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});
-const fmtS = dt => dt.toLocaleDateString("en-GB",{day:"numeric",month:"short"});
-const sameDay = (a,b) => a.getDate()===b.getDate()&&a.getMonth()===b.getMonth()&&a.getFullYear()===b.getFullYear();
-const isToday = dt => sameDay(dt, today);
-const gbp = v => "£"+Number(v).toLocaleString("en-GB",{minimumFractionDigits:0,maximumFractionDigits:0});
-const dd = (n,h=11) => { const d=new Date(today); d.setDate(d.getDate()+n); d.setHours(h,0,0,0); return d; };
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const CHECKLIST_ITEMS=["Change all bedding","Replace towels","Clean bathroom","Clean kitchen","Vacuum all rooms","Mop hard floors","Wipe surfaces","Check appliances","Restock toiletries","Empty bins","Check for damage","Lock up securely"];
 
 function pill(s){
- const m={pending:[C.amber,"#FFF8E7"],"in-progress":[C.navy,"#EEF1F7"],complete:[C.mint,"#E8FAF4"]};
+ const m={pending:[C.amber,"#FFF8E7"],"in-progress":[C.navy,"#EEF1F7"],complete:[C.mint,"#E8FAF4"],open:[C.coral,"#FFF0EE"],resolved:[C.mint,"#E8FAF4"]};
  const [fg,bg]=m[s]||[C.muted,"#F4F5F7"];
  return {color:fg,background:bg,borderRadius:99,padding:"2px 10px",fontSize:11,fontWeight:700,textTransform:"uppercase",display:"inline-block"};
 }
 
-function Btn({onClick,children,secondary,small}){
- return <button onClick={onClick} style={{padding:small?"6px 12px":"9px 18px",borderRadius:10,border:secondary?`1.5px solid ${C.border}`:"none",background:secondary?C.surface:C.navy,color:secondary?C.text:"#fff",fontSize:small?12:14,fontWeight:600,whiteSpace:"nowrap"}}>{children}</button>;
+function load(key,def){
+ try{
+   const v=localStorage.getItem("co_"+key);
+   if(v){
+     const p=JSON.parse(v);
+     if(key==="bookings") return p.map(b=>({...b,checkin:new Date(b.checkin),checkout:new Date(b.checkout)}));
+     if(key==="cleans")   return p.map(c=>({...c,date:new Date(c.date)}));
+     return p;
+   }
+ }catch(e){}
+ return def;
+}
+function save(key,val){try{localStorage.setItem("co_"+key,JSON.stringify(val));}catch(e){}}
+
+// ── UI COMPONENTS ──────────────────────────────────────────────────────────────
+function Btn({onClick,children,secondary,small,danger}){
+ const bg=danger?C.coral:secondary?C.surface:C.navy;
+ const color=secondary&&!danger?C.text:"#fff";
+ const border=secondary?`1.5px solid ${danger?C.coral:C.border}`:"none";
+ return <button onClick={onClick} style={{padding:small?"6px 12px":"9px 18px",borderRadius:10,border,background:bg,color,fontSize:small?12:14,fontWeight:600,whiteSpace:"nowrap"}}>{children}</button>;
 }
 
 function Card({children,style={}}){
  return <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px 20px",...style}}>{children}</div>;
 }
 
-function Modal({onClose,title,children}){
+function Modal({onClose,title,children,wide}){
  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}}>
-   <div style={{background:C.surface,borderRadius:20,padding:"24px",width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto"}}>
+   <div style={{background:C.surface,borderRadius:20,padding:"24px",width:"100%",maxWidth:wide?640:480,maxHeight:"90vh",overflowY:"auto"}}>
      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
        <div style={{fontWeight:800,fontSize:18}}>{title}</div>
        <button onClick={onClose} style={{background:C.bg,border:"none",borderRadius:8,width:32,height:32,fontSize:18,cursor:"pointer"}}>×</button>
@@ -60,11 +75,15 @@ function Modal({onClose,title,children}){
  </div>;
 }
 
-function Field({label,value,onChange,placeholder,type="text"}){
+function Field({label,value,onChange,placeholder,type="text",multiline}){
  return <div style={{marginBottom:12}}>
    <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>{label}</label>
-   <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-     style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.bg,outline:"none"}}/>
+   {multiline
+     ? <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={3}
+         style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.bg,outline:"none",resize:"vertical"}}/>
+     : <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+         style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.bg,outline:"none"}}/>
+   }
  </div>;
 }
 
@@ -72,26 +91,35 @@ function Toast({msg,type}){
  return <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:type==="error"?C.coral:C.mint,color:"#fff",padding:"12px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 4px 20px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>{msg}</div>;
 }
 
+function SectionTitle({children}){
+ return <div style={{fontSize:13,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>{children}</div>;
+}
+
+function PH({title,subtitle,children}){
+ return <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}}>
+   <div>
+     <h1 style={{fontSize:24,fontWeight:800}}>{title}</h1>
+     {subtitle&&<div style={{fontSize:13,color:C.muted,marginTop:2}}>{subtitle}</div>}
+   </div>
+   {children&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{children}</div>}
+ </div>;
+}
+
 // ── LOGIN ──────────────────────────────────────────────────────────────────────
 function Login({cleaners,setRole,setCleaner}){
- const [pin,setPin] = useState("");
- const [err,setErr] = useState("");
-
- const handle = dg => {
+ const [pin,setPin]=useState("");
+ const [err,setErr]=useState("");
+ const handle=dg=>{
    if(dg==="←"){setPin(p=>p.slice(0,-1));setErr("");return;}
-   const next = pin+dg;
-   setPin(next);
-   setErr("");
+   const next=pin+dg; setPin(next); setErr("");
    if(next.length===4){
      if(next==="0000"){setRole("manager");return;}
-     const c = cleaners.find(x=>x.pin===next);
+     const c=cleaners.find(x=>x.pin===next);
      if(c){setRole("cleaner");setCleaner(c);return;}
      setTimeout(()=>{setPin("");setErr("Wrong PIN — try again");},300);
    }
  };
-
- const digits = ["1","2","3","4","5","6","7","8","9","","0","←"];
-
+ const digits=["1","2","3","4","5","6","7","8","9","","0","←"];
  return <div style={{minHeight:"100vh",background:C.navy,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:24}}>
    <div style={{marginBottom:32,textAlign:"center"}}>
      <div style={{fontSize:11,letterSpacing:"0.2em",color:C.coral,fontWeight:700,textTransform:"uppercase",marginBottom:8}}>CleanOps</div>
@@ -102,31 +130,36 @@ function Login({cleaners,setRole,setCleaner}){
      <div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:24}}>
        {[0,1,2,3].map(i=><div key={i} style={{width:14,height:14,borderRadius:"50%",background:pin.length>i?C.navy:C.border}}/>)}
      </div>
-     {err && <div style={{color:C.coral,fontSize:13,textAlign:"center",marginBottom:12}}>{err}</div>}
+     {err&&<div style={{color:C.coral,fontSize:13,textAlign:"center",marginBottom:12}}>{err}</div>}
      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-       {digits.map((d,i)=><button key={i} onClick={()=>d&&handle(d)}
-         style={{height:54,borderRadius:12,border:"none",background:d?"#F7F8FA":"transparent",fontSize:20,fontWeight:600,color:C.navy,cursor:d?"pointer":"default"}}>{d}</button>)}
+       {digits.map((d,i)=><button key={i} onClick={()=>d&&handle(d)} style={{height:54,borderRadius:12,border:"none",background:d?"#F7F8FA":"transparent",fontSize:20,fontWeight:600,color:C.navy,cursor:d?"pointer":"default"}}>{d}</button>)}
      </div>
    </div>
  </div>;
 }
 
 // ── SIDEBAR ────────────────────────────────────────────────────────────────────
-function Sidebar({tab,setTab,onLogout}){
+function Sidebar({tab,setTab,onLogout,maintenanceCount}){
  const items=[
    {id:"diary",label:"Diary",icon:"📅"},
    {id:"cleans",label:"Cleans",icon:"🧹"},
+   {id:"occupancy",label:"Occupancy",icon:"📊"},
    {id:"earnings",label:"Earnings",icon:"💷"},
+   {id:"expenses",label:"Expenses",icon:"🧾"},
    {id:"properties",label:"Properties",icon:"🏠"},
    {id:"team",label:"Team",icon:"👥"},
+   {id:"maintenance",label:"Maintenance",icon:"🔧",badge:maintenanceCount},
  ];
- return <div style={{position:"fixed",left:0,top:0,bottom:0,width:200,background:C.navy,display:"flex",flexDirection:"column",padding:"20px 0",zIndex:50}}>
-   <div style={{padding:"0 16px 24px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+ return <div style={{position:"fixed",left:0,top:0,bottom:0,width:200,background:C.navy,display:"flex",flexDirection:"column",padding:"20px 0",zIndex:50,overflowY:"auto"}}>
+   <div style={{padding:"0 16px 20px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
      <div style={{fontSize:10,letterSpacing:"0.2em",color:C.coral,fontWeight:700,textTransform:"uppercase"}}>CleanOps</div>
      <div style={{color:"#fff",fontWeight:700,fontSize:14,marginTop:2}}>Manager</div>
    </div>
    <nav style={{flex:1,padding:"12px 8px"}}>
-     {items.map(item=><button key={item.id} onClick={()=>setTab(item.id)} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 12px",borderRadius:10,border:"none",marginBottom:2,background:tab===item.id?"rgba(255,255,255,0.12)":"transparent",color:tab===item.id?"#fff":"#8A99B8",fontSize:14,fontWeight:tab===item.id?600:400,textAlign:"left",cursor:"pointer"}}>{item.icon} {item.label}</button>)}
+     {items.map(item=><button key={item.id} onClick={()=>setTab(item.id)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"10px 12px",borderRadius:10,border:"none",marginBottom:2,background:tab===item.id?"rgba(255,255,255,0.12)":"transparent",color:tab===item.id?"#fff":"#8A99B8",fontSize:14,fontWeight:tab===item.id?600:400,textAlign:"left",cursor:"pointer"}}>
+       <span>{item.icon} {item.label}</span>
+       {item.badge>0&&<span style={{background:C.coral,color:"#fff",borderRadius:99,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{item.badge}</span>}
+     </button>)}
    </nav>
    <div style={{padding:"0 8px"}}>
      <button onClick={onLogout} style={{width:"100%",padding:"10px 12px",borderRadius:10,border:"none",background:"transparent",color:"#8A99B8",fontSize:13,textAlign:"left",cursor:"pointer"}}>🚪 Log out</button>
@@ -136,55 +169,67 @@ function Sidebar({tab,setTab,onLogout}){
 
 // ── DIARY ──────────────────────────────────────────────────────────────────────
 function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,showToast}){
- const [wo,setWo] = useState(0);
- const [showAdd,setShowAdd] = useState(false);
- const [bForm,setBForm] = useState({propertyId:"",guest:"",checkin:"",checkout:""});
- const ws = new Date(today);
- ws.setDate(today.getDate()-today.getDay()+1+wo*7);
- const days = Array.from({length:7},(_,i)=>{ const d=new Date(ws); d.setDate(ws.getDate()+i); return d; });
+ const [wo,setWo]=useState(0);
+ const [showAdd,setShowAdd]=useState(false);
+ const [editB,setEditB]=useState(null);
+ const [selB,setSelB]=useState(null);
+ const [bForm,setBForm]=useState({propertyId:"",guest:"",checkin:"",checkout:"",notes:"",rating:""});
 
- const upcoming = bookings.filter(b=>b.checkout>today&&b.checkout<=dd(7)).sort((a,b)=>a.checkout-b.checkout);
- const todayOuts = bookings.filter(b=>sameDay(b.checkout,today));
+ const ws=new Date(today); ws.setDate(today.getDate()-today.getDay()+1+wo*7);
+ const days=Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(ws.getDate()+i);return d;});
+ const upcoming=bookings.filter(b=>new Date(b.checkout)>today&&new Date(b.checkout)<=dd(7)).sort((a,b)=>new Date(a.checkout)-new Date(b.checkout));
+ const todayOuts=bookings.filter(b=>sameDay(b.checkout,today));
 
  function notify(b){
-   const p = properties.find(x=>x.id===b.propertyId);
-   const assigned = cleaners.filter(c=>c.assignedProperties?.includes(b.propertyId));
-   const msg = encodeURIComponent("Hi, just a reminder that there is a checkout at "+( p?.name||"the property")+" on "+fmt(b.checkout)+". Please can you go in and clean as soon as possible. Thanks");
-   if(assigned.length>0){
-     const phone = assigned[0].phone.replace(/\s/g,"");
-     window.open("sms:"+phone+"?body="+msg,"_self");
-   } else {
-     window.open("sms:?body="+msg,"_self");
-   }
+   const p=properties.find(x=>x.id===b.propertyId);
+   const assigned=cleaners.filter(c=>c.assignedProperties?.includes(b.propertyId));
+   const msg=encodeURIComponent("Hi, just a reminder that there is a checkout at "+(p?.name||"the property")+" on "+fmt(b.checkout)+". Please can you go in and clean as soon as possible. Thanks");
+   if(assigned.length>0){const phone=assigned[0].phone.replace(/\s/g,"");window.open("sms:"+phone+"?body="+msg,"_self");}
+   else window.open("sms:?body="+msg,"_self");
    setBookings(bs=>bs.map(x=>x.id===b.id?{...x,notified:true}:x));
    showToast("Opening Messages...");
  }
 
  function schedClean(b){
    if(cleans.find(c=>c.bookingId===b.id)){showToast("Clean already scheduled");return;}
-   const p = properties.find(x=>x.id===b.propertyId);
-   const ac = cleaners.find(c=>c.assignedProperties?.includes(b.propertyId));
-   setCleans(cs=>[...cs,{id:"cl"+Date.now(),bookingId:b.id,propertyId:b.propertyId,cleanerId:ac?.id||null,date:b.checkout,status:"pending"}]);
+   const p=properties.find(x=>x.id===b.propertyId);
+   const ac=cleaners.find(c=>c.assignedProperties?.includes(b.propertyId));
+   setCleans(cs=>[...cs,{id:"cl"+Date.now(),bookingId:b.id,propertyId:b.propertyId,cleanerId:ac?.id||null,date:new Date(b.checkout),status:"pending",checklist:{},photos:[],notes:""}]);
    showToast("Clean scheduled for "+p?.name);
  }
 
- return <div>
-   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-     <h1 style={{fontSize:24,fontWeight:800}}>Booking Diary</h1>
-     <div style={{display:"flex",gap:8}}>
-       <Btn onClick={()=>setWo(w=>w-1)} secondary small>←</Btn>
-       <Btn onClick={()=>setWo(0)} secondary small>Today</Btn>
-       <Btn onClick={()=>setWo(w=>w+1)} secondary small>→</Btn>
-       <Btn onClick={()=>setShowAdd(true)}>+ Booking</Btn>
-     </div>
-   </div>
+ function saveBooking(){
+   if(!bForm.propertyId||!bForm.guest||!bForm.checkin||!bForm.checkout)return;
+   const cin=new Date(bForm.checkin); cin.setHours(15,0,0,0);
+   const cout=new Date(bForm.checkout); cout.setHours(11,0,0,0);
+   if(editB){
+     setBookings(bs=>bs.map(x=>x.id===editB.id?{...x,propertyId:bForm.propertyId,guest:bForm.guest,checkin:cin,checkout:cout,notes:bForm.notes,rating:bForm.rating}:x));
+     showToast("Booking updated");setEditB(null);
+   } else {
+     setBookings(bs=>[...bs,{id:"b"+Date.now(),propertyId:bForm.propertyId,guest:bForm.guest,checkin:cin,checkout:cout,notes:bForm.notes,rating:bForm.rating,notified:false}]);
+     showToast("Booking added");
+   }
+   setBForm({propertyId:"",guest:"",checkin:"",checkout:"",notes:"",rating:""});
+   setShowAdd(false);
+ }
 
-   {todayOuts.length>0 && <div style={{background:"#FFF3F1",border:`1px solid ${C.coral}`,borderRadius:12,padding:"12px 16px",marginBottom:20,display:"flex",gap:10}}>
+ function openEdit(b){
+   setBForm({propertyId:b.propertyId,guest:b.guest,checkin:new Date(b.checkin).toISOString().split("T")[0],checkout:new Date(b.checkout).toISOString().split("T")[0],notes:b.notes||"",rating:b.rating||""});
+   setEditB(b);setShowAdd(true);
+ }
+
+ return <div>
+   <PH title="Booking Diary" subtitle={fmtS(days[0])+" – "+fmtS(days[6])}>
+     <Btn onClick={()=>setWo(w=>w-1)} secondary small>← Prev</Btn>
+     <Btn onClick={()=>setWo(0)} secondary small>Today</Btn>
+     <Btn onClick={()=>setWo(w=>w+1)} secondary small>Next →</Btn>
+     <Btn onClick={()=>{setEditB(null);setBForm({propertyId:"",guest:"",checkin:"",checkout:"",notes:"",rating:""});setShowAdd(true);}}>+ Booking</Btn>
+   </PH>
+
+   {todayOuts.length>0&&<div style={{background:"#FFF3F1",border:`1px solid ${C.coral}`,borderRadius:12,padding:"12px 16px",marginBottom:20,display:"flex",gap:10}}>
      <span>🔔</span>
-     <div>
-       <div style={{fontWeight:700,color:C.coral,fontSize:13}}>Checkouts today</div>
-       <div style={{color:C.textSoft,fontSize:13}}>{todayOuts.map(b=>b.guest).join(", ")}</div>
-     </div>
+     <div><div style={{fontWeight:700,color:C.coral,fontSize:13}}>Checkouts today</div>
+     <div style={{color:C.textSoft,fontSize:13}}>{todayOuts.map(b=>b.guest).join(", ")}</div></div>
    </div>}
 
    <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,overflow:"auto",marginBottom:24}}>
@@ -199,7 +244,7 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
          </tr>
        </thead>
        <tbody>
-         {properties.length===0 && <tr><td colSpan={8} style={{padding:32,textAlign:"center",color:C.muted}}>Add properties to see the diary</td></tr>}
+         {properties.length===0&&<tr><td colSpan={8} style={{padding:32,textAlign:"center",color:C.muted}}>Add properties to see the diary</td></tr>}
          {properties.map(prop=><tr key={prop.id} style={{borderBottom:`1px solid ${C.border}`}}>
            <td style={{padding:"10px 14px"}}>
              <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -208,11 +253,11 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
              </div>
            </td>
            {days.map((day,i)=>{
-             const bks = bookings.filter(b=>b.propertyId===prop.id&&b.checkin<=day&&b.checkout>day);
-             const isOut = bookings.some(b=>b.propertyId===prop.id&&sameDay(b.checkout,day));
-             return <td key={i} style={{borderLeft:`1px solid ${C.border}`,background:isToday(day)?"#FAFEFF":"transparent",padding:3,verticalAlign:"top",position:"relative"}}>
+             const bks=bookings.filter(b=>b.propertyId===prop.id&&new Date(b.checkin)<=day&&new Date(b.checkout)>day);
+             const isOut=bookings.some(b=>b.propertyId===prop.id&&sameDay(b.checkout,day));
+             return <td key={i} onClick={()=>bks[0]&&setSelB(bks[0])} style={{borderLeft:`1px solid ${C.border}`,background:isToday(day)?"#FAFEFF":"transparent",padding:3,verticalAlign:"top",cursor:bks[0]?"pointer":"default"}}>
                {bks.map(b=><div key={b.id} style={{background:prop.color+"22",borderLeft:`3px solid ${prop.color}`,borderRadius:3,padding:"2px 4px",fontSize:10,fontWeight:600,color:prop.color}}>{b.guest.split(" ")[0]}</div>)}
-               {isOut && <div style={{fontSize:8,color:C.coral,fontWeight:700,textAlign:"right"}}>OUT</div>}
+               {isOut&&<div style={{fontSize:8,color:C.coral,fontWeight:700,textAlign:"right"}}>OUT</div>}
              </td>;
            })}
          </tr>)}
@@ -220,28 +265,49 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
      </table>
    </div>
 
-   <div style={{fontWeight:700,fontSize:13,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Upcoming checkouts — next 7 days</div>
-   {upcoming.length===0 && <div style={{textAlign:"center",padding:"32px 0",color:C.muted}}>🏖️ No checkouts in the next 7 days</div>}
+   <SectionTitle>Upcoming checkouts — next 7 days</SectionTitle>
+   {upcoming.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:C.muted}}>🏖️ No checkouts in the next 7 days</div>}
    <div style={{display:"flex",flexDirection:"column",gap:10}}>
      {upcoming.map(b=>{
-       const prop = properties.find(p=>p.id===b.propertyId);
-       const hasClean = cleans.some(c=>c.bookingId===b.id);
+       const prop=properties.find(p=>p.id===b.propertyId);
+       const hasClean=cleans.some(c=>c.bookingId===b.id);
        return <Card key={b.id}>
-         <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-           <div style={{width:8,height:8,borderRadius:"50%",background:prop?.color,flexShrink:0}}/>
+         <div style={{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+           <div style={{width:8,height:8,borderRadius:"50%",background:prop?.color,marginTop:5,flexShrink:0}}/>
            <div style={{flex:1}}>
-             <div style={{fontWeight:600}}>{b.guest}</div>
-             <div style={{fontSize:13,color:C.textSoft}}>{prop?.name} · {fmt(b.checkout)}</div>
+             <div style={{fontWeight:600}}>{b.guest} {b.rating&&<span style={{fontSize:12,color:C.amber}}>{"★".repeat(Number(b.rating))}</span>}</div>
+             <div style={{fontSize:13,color:C.textSoft}}>{prop?.name} · Checkout {fmt(b.checkout)}</div>
+             {b.notes&&<div style={{fontSize:12,color:C.muted,marginTop:4}}>📝 {b.notes}</div>}
            </div>
-           {!hasClean && <Btn onClick={()=>schedClean(b)} secondary small>+ Clean</Btn>}
-           {hasClean && <span style={pill("pending")}>Scheduled</span>}
-           {!b.notified && <Btn onClick={()=>notify(b)} small>Notify</Btn>}
-           {b.notified && <span style={{...pill("complete"),fontSize:11}}>✓ Notified</span>}
+           <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+             {!hasClean&&<Btn onClick={()=>schedClean(b)} secondary small>+ Clean</Btn>}
+             {hasClean&&<span style={pill("pending")}>Scheduled</span>}
+             {!b.notified&&<Btn onClick={()=>notify(b)} small>Notify</Btn>}
+             {b.notified&&<span style={{...pill("complete"),fontSize:11}}>✓ Notified</span>}
+             <button onClick={()=>openEdit(b)} style={{background:"none",border:"none",fontSize:16,cursor:"pointer"}}>✏️</button>
+             <button onClick={()=>{if(window.confirm("Delete this booking?"))setBookings(bs=>bs.filter(x=>x.id!==b.id));}} style={{background:"none",border:"none",fontSize:16,cursor:"pointer"}}>🗑️</button>
+           </div>
          </div>
        </Card>;
      })}
    </div>
-   {showAdd && <Modal onClose={()=>setShowAdd(false)} title="Add booking">
+
+   {selB&&<Modal onClose={()=>setSelB(null)} title="Booking details">
+     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+       {[["Guest",selB.guest],["Property",properties.find(p=>p.id===selB.propertyId)?.name],["Check-in",fmt(selB.checkin),C.mint],["Checkout",fmt(selB.checkout),C.coral]].map(([l,v,a])=><div key={l} style={{background:C.bg,borderRadius:10,padding:"10px 14px"}}>
+         <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:2}}>{l}</div>
+         <div style={{fontSize:14,fontWeight:700,color:a||C.text}}>{v}</div>
+       </div>)}
+     </div>
+     {selB.notes&&<div style={{background:C.bg,borderRadius:10,padding:"10px 14px",marginBottom:12}}><div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:2}}>Notes</div><div style={{fontSize:13}}>{selB.notes}</div></div>}
+     {selB.rating&&<div style={{fontSize:14,color:C.amber,marginBottom:12}}>{"★".repeat(Number(selB.rating))} Guest rating</div>}
+     <div style={{display:"flex",gap:8}}>
+       <Btn onClick={()=>{openEdit(selB);setSelB(null);}}>Edit booking</Btn>
+       <Btn onClick={()=>{if(window.confirm("Delete?"))setBookings(bs=>bs.filter(x=>x.id!==selB.id));setSelB(null);}} danger>Delete</Btn>
+     </div>
+   </Modal>}
+
+   {showAdd&&<Modal onClose={()=>{setShowAdd(false);setEditB(null);}} title={editB?"Edit booking":"Add booking"}>
      <div>
        <div style={{marginBottom:12}}>
          <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Property</label>
@@ -251,19 +317,19 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
          </select>
        </div>
        <Field label="Guest name" value={bForm.guest} onChange={v=>setBForm(f=>({...f,guest:v}))} placeholder="e.g. John Smith"/>
-       <Field label="Check-in date" value={bForm.checkin} onChange={v=>setBForm(f=>({...f,checkin:v}))} placeholder="YYYY-MM-DD" type="date"/>
-       <Field label="Checkout date" value={bForm.checkout} onChange={v=>setBForm(f=>({...f,checkout:v}))} placeholder="YYYY-MM-DD" type="date"/>
+       <Field label="Check-in" value={bForm.checkin} onChange={v=>setBForm(f=>({...f,checkin:v}))} type="date"/>
+       <Field label="Checkout" value={bForm.checkout} onChange={v=>setBForm(f=>({...f,checkout:v}))} type="date"/>
+       <Field label="Notes (parking, pets, early checkin...)" value={bForm.notes} onChange={v=>setBForm(f=>({...f,notes:v}))} placeholder="Any special notes..." multiline/>
+       <div style={{marginBottom:12}}>
+         <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Guest rating (after checkout)</label>
+         <div style={{display:"flex",gap:8}}>
+           {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setBForm(f=>({...f,rating:String(n)}))} style={{fontSize:24,background:"none",border:"none",cursor:"pointer",opacity:Number(bForm.rating)>=n?1:0.3}}>★</button>)}
+           {bForm.rating&&<button onClick={()=>setBForm(f=>({...f,rating:""}))} style={{fontSize:12,color:C.muted,background:"none",border:"none",cursor:"pointer"}}>Clear</button>}
+         </div>
+       </div>
        <div style={{display:"flex",gap:10,marginTop:16}}>
-         <Btn onClick={()=>{
-           if(!bForm.propertyId||!bForm.guest||!bForm.checkin||!bForm.checkout)return;
-           const cin=new Date(bForm.checkin); cin.setHours(15,0,0,0);
-           const cout=new Date(bForm.checkout); cout.setHours(11,0,0,0);
-           setBookings(bs=>[...bs,{id:"b"+Date.now(),propertyId:bForm.propertyId,guest:bForm.guest,checkin:cin,checkout:cout,notified:false}]);
-           setBForm({propertyId:"",guest:"",checkin:"",checkout:""});
-           setShowAdd(false);
-           showToast("Booking added");
-         }}>Add booking</Btn>
-         <Btn onClick={()=>setShowAdd(false)} secondary>Cancel</Btn>
+         <Btn onClick={saveBooking}>{editB?"Update":"Add booking"}</Btn>
+         <Btn onClick={()=>{setShowAdd(false);setEditB(null);}} secondary>Cancel</Btn>
        </div>
      </div>
    </Modal>}
@@ -272,74 +338,157 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
 
 // ── CLEANS ─────────────────────────────────────────────────────────────────────
 function CleansView({cleans,setCleans,properties,cleaners,bookings,showToast}){
- const [filter,setFilter] = useState("all");
- const list = cleans.filter(c=>filter==="all"||c.status===filter).sort((a,b)=>a.date-b.date);
+ const [filter,setFilter]=useState("all");
+ const [selC,setSelC]=useState(null);
+ const list=cleans.filter(c=>filter==="all"||c.status===filter).sort((a,b)=>new Date(a.date)-new Date(b.date));
 
  return <div>
-   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-     <h1 style={{fontSize:24,fontWeight:800}}>Cleans</h1>
+   <PH title="Cleans" subtitle={cleans.length+" total"}>
      <div style={{display:"flex",gap:4,background:C.bg,borderRadius:10,padding:4}}>
        {["all","pending","in-progress","complete"].map(f=><button key={f} onClick={()=>setFilter(f)} style={{padding:"5px 12px",borderRadius:8,border:"none",fontSize:12,fontWeight:600,background:filter===f?C.surface:"transparent",color:filter===f?C.text:C.muted,cursor:"pointer"}}>{f==="all"?"All":f==="in-progress"?"Active":f.charAt(0).toUpperCase()+f.slice(1)}</button>)}
      </div>
-   </div>
-   {list.length===0 && <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>🧹 No cleans</div>}
+   </PH>
+   {list.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>🧹 No cleans</div>}
    <div style={{display:"flex",flexDirection:"column",gap:10}}>
      {list.map(c=>{
-       const prop = properties.find(p=>p.id===c.propertyId);
-       const clnr = cleaners.find(x=>x.id===c.cleanerId);
-       const bk = bookings.find(b=>b.id===c.bookingId);
-       return <Card key={c.id}>
+       const prop=properties.find(p=>p.id===c.propertyId);
+       const clnr=cleaners.find(x=>x.id===c.cleanerId);
+       const bk=bookings.find(b=>b.id===c.bookingId);
+       const checklistDone=Object.values(c.checklist||{}).filter(Boolean).length;
+       return <Card key={c.id} style={{cursor:"pointer"}} onClick={()=>setSelC(c)}>
          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
            <div style={{width:8,height:8,borderRadius:"50%",background:prop?.color,flexShrink:0}}/>
            <div style={{flex:1}}>
              <div style={{fontWeight:600}}>{prop?.name}</div>
              <div style={{fontSize:13,color:C.textSoft}}>{fmtS(c.date)} · {clnr?.name||"Unassigned"}{bk?" · after "+bk.guest:""}</div>
+             {checklistDone>0&&<div style={{fontSize:12,color:C.mint,marginTop:2}}>✓ {checklistDone}/{CHECKLIST_ITEMS.length} tasks done</div>}
+             {c.photos?.length>0&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>📷 {c.photos.length} photo{c.photos.length>1?"s":""}</div>}
            </div>
            <span style={pill(c.status)}>{c.status}</span>
-           {c.status==="pending" && <Btn onClick={()=>{setCleans(cs=>cs.map(x=>x.id===c.id?{...x,status:"in-progress"}:x));showToast("Started");}} small secondary>Start</Btn>}
-           {c.status==="in-progress" && <Btn onClick={()=>{setCleans(cs=>cs.map(x=>x.id===c.id?{...x,status:"complete"}:x));showToast("Complete ✓");}} small>✓ Done</Btn>}
          </div>
        </Card>;
      })}
+   </div>
+
+   {selC&&<Modal onClose={()=>setSelC(null)} title="Clean details" wide>
+     <div>
+       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+         {[["Property",properties.find(p=>p.id===selC.propertyId)?.name],["Date",fmt(selC.date)],["Cleaner",cleaners.find(c=>c.id===selC.cleanerId)?.name||"Unassigned"],["Status",<span style={pill(selC.status)}>{selC.status}</span>]].map(([l,v])=><div key={l} style={{background:C.bg,borderRadius:10,padding:"10px 14px"}}>
+           <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:2}}>{l}</div>
+           <div style={{fontSize:14,fontWeight:600}}>{v}</div>
+         </div>)}
+       </div>
+       <SectionTitle>Checklist</SectionTitle>
+       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:16}}>
+         {CHECKLIST_ITEMS.map(item=><div key={item} style={{display:"flex",alignItems:"center",gap:8,background:C.bg,borderRadius:8,padding:"8px 10px"}}>
+           <div style={{width:16,height:16,borderRadius:4,background:selC.checklist?.[item]?C.mint:C.border,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+             {selC.checklist?.[item]&&<span style={{color:"#fff",fontSize:11}}>✓</span>}
+           </div>
+           <span style={{fontSize:12}}>{item}</span>
+         </div>)}
+       </div>
+       {selC.notes&&<><SectionTitle>Notes</SectionTitle><div style={{background:C.bg,borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:13}}>{selC.notes}</div></>}
+       {selC.photos?.length>0&&<><SectionTitle>Photos</SectionTitle>
+         <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+           {selC.photos.map((ph,i)=><img key={i} src={ph} alt="clean" style={{width:80,height:80,objectFit:"cover",borderRadius:8}}/>)}
+         </div>
+       </>}
+       <Btn onClick={()=>setSelC(null)} secondary>Close</Btn>
+     </div>
+   </Modal>}
+ </div>;
+}
+
+// ── OCCUPANCY ──────────────────────────────────────────────────────────────────
+function OccupancyView({properties,bookings}){
+ const [yr,setYr]=useState(today.getFullYear());
+ const [mo,setMo]=useState(today.getMonth());
+ const daysInMonth=new Date(yr,mo+1,0).getDate();
+ const days=Array.from({length:daysInMonth},(_,i)=>new Date(yr,mo,i+1));
+
+ return <div>
+   <PH title="Occupancy" subtitle={MONTHS[mo]+" "+yr}>
+     <div style={{display:"flex",gap:8,alignItems:"center"}}>
+       <button onClick={()=>{let m=mo-1,y=yr;if(m<0){m=11;y--;}setMo(m);setYr(y);}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",cursor:"pointer"}}>←</button>
+       <span style={{fontSize:14,fontWeight:600,minWidth:80,textAlign:"center"}}>{MONTHS[mo]} {yr}</span>
+       <button onClick={()=>{let m=mo+1,y=yr;if(m>11){m=0;y++;}setMo(m);setYr(y);}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",cursor:"pointer"}}>→</button>
+     </div>
+   </PH>
+   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"auto"}}>
+     <table style={{width:"100%",borderCollapse:"collapse",minWidth:600}}>
+       <thead>
+         <tr style={{background:"#FAFBFD"}}>
+           <th style={{padding:"10px 14px",textAlign:"left",fontSize:12,color:C.muted,fontWeight:600,borderBottom:`1px solid ${C.border}`,minWidth:140}}>Property</th>
+           {days.map((day,i)=><th key={i} style={{padding:"6px 2px",textAlign:"center",borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,fontSize:10,fontWeight:600,color:isToday(day)?C.coral:C.muted,minWidth:28,background:isToday(day)?"#EEF6FF":"#FAFBFD"}}>
+             {day.getDate()}
+           </th>)}
+           <th style={{padding:"10px 8px",fontSize:12,fontWeight:700,color:C.text,textAlign:"right",borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`}}>Occ%</th>
+         </tr>
+       </thead>
+       <tbody>
+         {properties.length===0&&<tr><td colSpan={daysInMonth+2} style={{padding:32,textAlign:"center",color:C.muted}}>Add properties first</td></tr>}
+         {properties.map(prop=>{
+           const bookedDays=days.filter(day=>bookings.some(b=>b.propertyId===prop.id&&new Date(b.checkin)<=day&&new Date(b.checkout)>day)).length;
+           const occ=Math.round((bookedDays/daysInMonth)*100);
+           return <tr key={prop.id} style={{borderBottom:`1px solid ${C.border}`}}>
+             <td style={{padding:"10px 14px"}}>
+               <div style={{display:"flex",alignItems:"center",gap:6}}>
+                 <div style={{width:8,height:8,borderRadius:"50%",background:prop.color}}/>
+                 <span style={{fontSize:12,fontWeight:600}}>{prop.name}</span>
+               </div>
+             </td>
+             {days.map((day,i)=>{
+               const booked=bookings.some(b=>b.propertyId===prop.id&&new Date(b.checkin)<=day&&new Date(b.checkout)>day);
+               const isIn=bookings.some(b=>b.propertyId===prop.id&&sameDay(b.checkin,day));
+               const isOut=bookings.some(b=>b.propertyId===prop.id&&sameDay(b.checkout,day));
+               let bg="transparent";
+               if(booked) bg=prop.color+"33";
+               if(isIn) bg=prop.color+"66";
+               if(isOut) bg=prop.color+"22";
+               return <td key={i} style={{borderLeft:`1px solid ${C.border}`,background:bg,height:36,padding:2,textAlign:"center"}}>
+                 {isIn&&<div style={{fontSize:8,color:prop.color,fontWeight:700}}>IN</div>}
+                 {isOut&&<div style={{fontSize:8,color:C.coral,fontWeight:700}}>OUT</div>}
+               </td>;
+             })}
+             <td style={{padding:"10px 8px",textAlign:"right",borderLeft:`1px solid ${C.border}`,fontWeight:700,fontSize:13,color:occ>=70?C.mint:occ>=50?C.amber:C.coral}}>{occ}%</td>
+           </tr>;
+         })}
+       </tbody>
+     </table>
+   </div>
+   <div style={{display:"flex",gap:16,marginTop:16,fontSize:12,color:C.muted}}>
+     <span>■ Occupied</span><span style={{color:C.mint}}>IN = check-in day</span><span style={{color:C.coral}}>OUT = checkout day</span>
    </div>
  </div>;
 }
 
 // ── EARNINGS ───────────────────────────────────────────────────────────────────
 function EarningsView({properties,earnings,setEarnings,showToast}){
- const [yr,setYr] = useState(today.getFullYear());
- const [showAdd,setShowAdd] = useState(false);
- const [form,setForm] = useState({propertyId:properties[0]?.id||"",year:today.getFullYear(),month:today.getMonth(),revenue:"",nights:""});
-
- const getE = (pid,y,m) => earnings.find(e=>e.propertyId===pid&&e.year===y&&e.month===m);
- const ytd = earnings.filter(e=>e.year===yr).reduce((s,e)=>s+e.revenue,0);
- const allYears = [...new Set([today.getFullYear(),...earnings.map(e=>e.year)])].sort();
-
+ const [yr,setYr]=useState(today.getFullYear());
+ const [showAdd,setShowAdd]=useState(false);
+ const [form,setForm]=useState({propertyId:properties[0]?.id||"",year:today.getFullYear(),month:today.getMonth(),revenue:"",nights:""});
+ const getE=(pid,y,m)=>earnings.find(e=>e.propertyId===pid&&e.year===y&&e.month===m);
+ const ytd=earnings.filter(e=>e.year===yr).reduce((s,e)=>s+e.revenue,0);
+ const allYears=[...new Set([today.getFullYear(),...earnings.map(e=>e.year)])].sort();
  function save(){
-   const rev=parseFloat(form.revenue), nts=parseInt(form.nights);
+   const rev=parseFloat(form.revenue),nts=parseInt(form.nights);
    if(!rev||!nts){showToast("Enter valid revenue and nights","error");return;}
-   const ex = getE(form.propertyId,Number(form.year),Number(form.month));
+   const ex=getE(form.propertyId,Number(form.year),Number(form.month));
    if(ex) setEarnings(es=>es.map(e=>e.id===ex.id?{...e,revenue:rev,nights:nts}:e));
    else setEarnings(es=>[...es,{id:"e"+Date.now(),propertyId:form.propertyId,year:Number(form.year),month:Number(form.month),revenue:rev,nights:nts}]);
    showToast("Saved");setShowAdd(false);
  }
-
  return <div>
-   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-     <h1 style={{fontSize:24,fontWeight:800}}>Earnings</h1>
-     <div style={{display:"flex",gap:8}}>
-       <select value={yr} onChange={e=>setYr(Number(e.target.value))} style={{padding:"8px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.surface}}>
-         {allYears.map(y=><option key={y} value={y}>{y}</option>)}
-       </select>
-       <Btn onClick={()=>setShowAdd(true)}>+ Add</Btn>
-     </div>
-   </div>
-
+   <PH title="Earnings" subtitle={yr}>
+     <select value={yr} onChange={e=>setYr(Number(e.target.value))} style={{padding:"8px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.surface}}>
+       {allYears.map(y=><option key={y} value={y}>{y}</option>)}
+     </select>
+     <Btn onClick={()=>setShowAdd(true)}>+ Add</Btn>
+   </PH>
    <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12,marginBottom:24}}>
      <Card><div style={{fontSize:12,color:C.muted,marginBottom:4}}>YTD Revenue</div><div style={{fontSize:22,fontWeight:800,color:C.mint}}>{gbp(ytd)}</div></Card>
-     <Card><div style={{fontSize:12,color:C.muted,marginBottom:4}}>Properties</div><div style={{fontSize:22,fontWeight:800}}>{properties.length}</div></Card>
+     <Card><div style={{fontSize:12,color:C.muted,marginBottom:4}}>Avg/property</div><div style={{fontSize:22,fontWeight:800}}>{gbp(properties.length?Math.round(ytd/properties.length):0)}</div></Card>
    </div>
-
    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"auto"}}>
      <table style={{width:"100%",borderCollapse:"collapse",minWidth:600}}>
        <thead>
@@ -350,9 +499,9 @@ function EarningsView({properties,earnings,setEarnings,showToast}){
          </tr>
        </thead>
        <tbody>
-         {properties.length===0 && <tr><td colSpan={14} style={{padding:32,textAlign:"center",color:C.muted}}>Add properties first</td></tr>}
+         {properties.length===0&&<tr><td colSpan={14} style={{padding:32,textAlign:"center",color:C.muted}}>Add properties first</td></tr>}
          {properties.map(prop=>{
-           const total = earnings.filter(e=>e.propertyId===prop.id&&e.year===yr).reduce((s,e)=>s+e.revenue,0);
+           const total=earnings.filter(e=>e.propertyId===prop.id&&e.year===yr).reduce((s,e)=>s+e.revenue,0);
            return <tr key={prop.id} style={{borderBottom:`1px solid ${C.border}`}}>
              <td style={{padding:"10px 14px"}}>
                <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -361,14 +510,11 @@ function EarningsView({properties,earnings,setEarnings,showToast}){
                </div>
              </td>
              {MONTHS.map((_,mi)=>{
-               const e = getE(prop.id,yr,mi);
-               const dim = new Date(yr,mi+1,0).getDate();
-               const occ = e ? Math.round((e.nights/dim)*100) : null;
+               const e=getE(prop.id,yr,mi);
+               const dim=new Date(yr,mi+1,0).getDate();
+               const occ=e?Math.round((e.nights/dim)*100):null;
                return <td key={mi} style={{padding:"8px 4px",textAlign:"center"}}>
-                 {e ? <div>
-                   <div style={{fontSize:11,fontWeight:700}}>{gbp(e.revenue)}</div>
-                   <div style={{fontSize:10,color:occ>=70?C.mint:occ>=50?C.amber:C.muted,fontWeight:600}}>{occ}%</div>
-                 </div> : <span style={{color:C.border,fontSize:12}}>—</span>}
+                 {e?<div><div style={{fontSize:11,fontWeight:700}}>{gbp(e.revenue)}</div><div style={{fontSize:10,color:occ>=70?C.mint:occ>=50?C.amber:C.muted,fontWeight:600}}>{occ}%</div></div>:<span style={{color:C.border,fontSize:12}}>—</span>}
                </td>;
              })}
              <td style={{padding:"10px 8px",textAlign:"right",fontWeight:800,fontSize:13}}>{gbp(total)}</td>
@@ -377,8 +523,7 @@ function EarningsView({properties,earnings,setEarnings,showToast}){
        </tbody>
      </table>
    </div>
-
-   {showAdd && <Modal onClose={()=>setShowAdd(false)} title="Add earnings">
+   {showAdd&&<Modal onClose={()=>setShowAdd(false)} title="Add earnings">
      <div>
        <div style={{marginBottom:12}}>
          <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Property</label>
@@ -408,49 +553,123 @@ function EarningsView({properties,earnings,setEarnings,showToast}){
  </div>;
 }
 
+// ── EXPENSES ───────────────────────────────────────────────────────────────────
+function ExpensesView({properties,expenses,setExpenses,showToast}){
+ const [showAdd,setShowAdd]=useState(false);
+ const [form,setForm]=useState({propertyId:"",description:"",amount:"",date:new Date().toISOString().split("T")[0],category:"maintenance"});
+ const CATS=["maintenance","cleaning","supplies","utilities","insurance","mortgage","other"];
+ const total=expenses.reduce((s,e)=>s+parseFloat(e.amount||0),0);
+ function add(){
+   if(!form.propertyId||!form.description||!form.amount)return;
+   setExpenses(es=>[...es,{...form,id:"x"+Date.now(),amount:parseFloat(form.amount)}]);
+   setForm({propertyId:"",description:"",amount:"",date:new Date().toISOString().split("T")[0],category:"maintenance"});
+   setShowAdd(false);showToast("Expense added");
+ }
+ return <div>
+   <PH title="Expenses" subtitle={expenses.length+" entries · "+gbp(total)+" total"}>
+     <Btn onClick={()=>setShowAdd(true)}>+ Add expense</Btn>
+   </PH>
+   {expenses.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>🧾 No expenses yet</div>}
+   <div style={{display:"flex",flexDirection:"column",gap:10}}>
+     {[...expenses].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(e=>{
+       const prop=properties.find(p=>p.id===e.propertyId);
+       return <Card key={e.id}>
+         <div style={{display:"flex",alignItems:"center",gap:12}}>
+           <div style={{width:8,height:8,borderRadius:"50%",background:prop?.color,flexShrink:0}}/>
+           <div style={{flex:1}}>
+             <div style={{fontWeight:600}}>{e.description}</div>
+             <div style={{fontSize:13,color:C.textSoft}}>{prop?.name} · {e.category} · {fmt(e.date)}</div>
+           </div>
+           <div style={{fontWeight:800,fontSize:15,color:C.coral}}>{gbp(e.amount)}</div>
+           <button onClick={()=>setExpenses(es=>es.filter(x=>x.id!==e.id))} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:C.muted}}>🗑️</button>
+         </div>
+       </Card>;
+     })}
+   </div>
+   {showAdd&&<Modal onClose={()=>setShowAdd(false)} title="Add expense">
+     <div>
+       <div style={{marginBottom:12}}>
+         <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Property</label>
+         <select value={form.propertyId} onChange={e=>setForm(f=>({...f,propertyId:e.target.value}))} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.bg}}>
+           <option value="">Select property...</option>
+           {properties.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+         </select>
+       </div>
+       <div style={{marginBottom:12}}>
+         <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Category</label>
+         <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.bg}}>
+           {CATS.map(c=><option key={c} value={c}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+         </select>
+       </div>
+       <Field label="Description" value={form.description} onChange={v=>setForm(f=>({...f,description:v}))} placeholder="e.g. New boiler service"/>
+       <Field label="Amount (£)" value={form.amount} onChange={v=>setForm(f=>({...f,amount:v}))} placeholder="e.g. 150"/>
+       <Field label="Date" value={form.date} onChange={v=>setForm(f=>({...f,date:v}))} type="date"/>
+       <div style={{display:"flex",gap:10,marginTop:16}}><Btn onClick={add}>Add expense</Btn><Btn onClick={()=>setShowAdd(false)} secondary>Cancel</Btn></div>
+     </div>
+   </Modal>}
+ </div>;
+}
+
 // ── PROPERTIES ─────────────────────────────────────────────────────────────────
 function PropertiesView({properties,setProperties,showToast}){
- const [showAdd,setShowAdd] = useState(false);
- const [form,setForm] = useState({name:"",address:"",icalUrl:"",color:C.coral});
- const colors = [C.coral,C.mint,"#7C5CBF",C.amber,"#3B82F6"];
+ const [showAdd,setShowAdd]=useState(false);
+ const [editP,setEditP]=useState(null);
+ const [form,setForm]=useState({name:"",address:"",icalUrl:"",color:C.coral,instructions:""});
+ const colors=[C.coral,C.mint,"#7C5CBF",C.amber,"#3B82F6"];
 
- function add(){
+ function save(){
    if(!form.name.trim())return;
-   setProperties(ps=>[...ps,{...form,id:"p"+Date.now()}]);
-   setForm({name:"",address:"",icalUrl:"",color:C.coral});
-   setShowAdd(false);showToast("Property added");
+   if(editP){
+     setProperties(ps=>ps.map(p=>p.id===editP.id?{...p,...form}:p));
+     showToast("Property updated");setEditP(null);
+   } else {
+     setProperties(ps=>[...ps,{...form,id:"p"+Date.now()}]);
+     showToast("Property added");
+   }
+   setForm({name:"",address:"",icalUrl:"",color:C.coral,instructions:""});
+   setShowAdd(false);
+ }
+
+ function openEdit(p){
+   setForm({name:p.name,address:p.address||"",icalUrl:p.icalUrl||"",color:p.color,instructions:p.instructions||""});
+   setEditP(p);setShowAdd(true);
  }
 
  return <div>
-   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-     <h1 style={{fontSize:24,fontWeight:800}}>Properties</h1>
-     <Btn onClick={()=>setShowAdd(true)}>+ Add</Btn>
-   </div>
-   {properties.length===0 && <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>🏠 No properties yet</div>}
+   <PH title="Properties" subtitle={properties.length+" properties"}><Btn onClick={()=>{setEditP(null);setForm({name:"",address:"",icalUrl:"",color:C.coral,instructions:""});setShowAdd(true);}}>+ Add</Btn></PH>
+   {properties.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>🏠 No properties yet</div>}
    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
      {properties.map(p=><div key={p.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
        <div style={{height:5,background:p.color}}/>
        <div style={{padding:"16px 18px"}}>
-         <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>{p.name}</div>
-         <div style={{color:C.textSoft,fontSize:13,marginBottom:12}}>📍 {p.address||"No address"}</div>
+         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+           <div style={{fontWeight:700,fontSize:15}}>{p.name}</div>
+           <div style={{display:"flex",gap:4}}>
+             <button onClick={()=>openEdit(p)} style={{background:"none",border:"none",fontSize:15,cursor:"pointer"}}>✏️</button>
+             <button onClick={()=>{if(window.confirm("Delete "+p.name+"?"))setProperties(ps=>ps.filter(x=>x.id!==p.id));}} style={{background:"none",border:"none",fontSize:15,cursor:"pointer"}}>🗑️</button>
+           </div>
+         </div>
+         <div style={{color:C.textSoft,fontSize:13,marginBottom:p.instructions?8:12}}>📍 {p.address||"No address"}</div>
+         {p.instructions&&<div style={{fontSize:12,color:C.muted,background:C.bg,padding:"6px 10px",borderRadius:8,marginBottom:12}}>📋 {p.instructions.slice(0,80)}{p.instructions.length>80?"...":""}</div>}
          <div style={{fontSize:12,color:p.icalUrl?C.mint:C.muted,background:p.icalUrl?"#E8FAF4":C.bg,padding:"5px 10px",borderRadius:8}}>
            {p.icalUrl?"✓ iCal connected":"⚠ No iCal URL"}
          </div>
        </div>
      </div>)}
    </div>
-   {showAdd && <Modal onClose={()=>setShowAdd(false)} title="Add property">
+   {showAdd&&<Modal onClose={()=>{setShowAdd(false);setEditP(null);}} title={editP?"Edit property":"Add property"}>
      <div>
-       <Field label="Property name" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. Harbour View Studio"/>
+       <Field label="Property name" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="e.g. Top floor Hazlebank flat"/>
        <Field label="Address" value={form.address} onChange={v=>setForm(f=>({...f,address:v}))} placeholder="Full address"/>
        <Field label="Airbnb iCal URL" value={form.icalUrl} onChange={v=>setForm(f=>({...f,icalUrl:v}))} placeholder="https://www.airbnb.co.uk/calendar/ical/..."/>
+       <Field label="Cleaning instructions (cleaners will see this)" value={form.instructions} onChange={v=>setForm(f=>({...f,instructions:v}))} placeholder="e.g. Spare key under mat. Use green cleaning products only..." multiline/>
        <div style={{marginBottom:16}}>
          <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:6}}>Colour</label>
          <div style={{display:"flex",gap:8}}>
            {colors.map(col=><div key={col} onClick={()=>setForm(f=>({...f,color:col}))} style={{width:28,height:28,borderRadius:"50%",background:col,cursor:"pointer",border:form.color===col?"3px solid "+C.navy:"3px solid transparent"}}/>)}
          </div>
        </div>
-       <div style={{display:"flex",gap:10}}><Btn onClick={add}>Add property</Btn><Btn onClick={()=>setShowAdd(false)} secondary>Cancel</Btn></div>
+       <div style={{display:"flex",gap:10}}><Btn onClick={save}>{editP?"Update":"Add property"}</Btn><Btn onClick={()=>{setShowAdd(false);setEditP(null);}} secondary>Cancel</Btn></div>
      </div>
    </Modal>}
  </div>;
@@ -458,30 +677,24 @@ function PropertiesView({properties,setProperties,showToast}){
 
 // ── TEAM ───────────────────────────────────────────────────────────────────────
 function TeamView({cleaners,setCleaners,properties,showToast}){
- const [showAdd,setShowAdd] = useState(false);
- const [form,setForm] = useState({name:"",phone:"",pin:"",assignedProperties:[]});
-
+ const [showAdd,setShowAdd]=useState(false);
+ const [form,setForm]=useState({name:"",phone:"",pin:"",assignedProperties:[]});
  function add(){
    if(!form.name.trim()||form.pin.length!==4)return;
    setCleaners(cs=>[...cs,{...form,id:"c"+Date.now()}]);
    setForm({name:"",phone:"",pin:"",assignedProperties:[]});
    setShowAdd(false);showToast("Cleaner added");
  }
-
  function toggleP(cid,pid){
    setCleaners(cs=>cs.map(c=>{
      if(c.id!==cid)return c;
-     const has=c.assignedProperties?.includes(pid);
+     const has=(c.assignedProperties||[]).includes(pid);
      return{...c,assignedProperties:has?(c.assignedProperties||[]).filter(p=>p!==pid):[...(c.assignedProperties||[]),pid]};
    }));
  }
-
  return <div>
-   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
-     <h1 style={{fontSize:24,fontWeight:800}}>Team</h1>
-     <Btn onClick={()=>setShowAdd(true)}>+ Add</Btn>
-   </div>
-   {cleaners.length===0 && <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>👥 No cleaners yet</div>}
+   <PH title="Team" subtitle={cleaners.length+" cleaners"}><Btn onClick={()=>setShowAdd(true)}>+ Add</Btn></PH>
+   {cleaners.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>👥 No cleaners yet</div>}
    <div style={{display:"flex",flexDirection:"column",gap:12}}>
      {cleaners.map(c=><Card key={c.id}>
        <div style={{display:"flex",gap:14}}>
@@ -496,13 +709,14 @@ function TeamView({cleaners,setCleaners,properties,showToast}){
                const active=(c.assignedProperties||[]).includes(prop.id);
                return <button key={prop.id} onClick={()=>toggleP(c.id,prop.id)} style={{padding:"3px 10px",borderRadius:20,border:`1.5px solid ${active?prop.color:C.border}`,background:active?prop.color+"18":"transparent",color:active?prop.color:C.muted,fontSize:11,fontWeight:600,cursor:"pointer"}}>{prop.name}</button>;
              })}
-             {properties.length===0 && <span style={{fontSize:12,color:C.muted}}>Add properties first</span>}
+             {properties.length===0&&<span style={{fontSize:12,color:C.muted}}>Add properties first</span>}
            </div>
          </div>
+         <button onClick={()=>setCleaners(cs=>cs.filter(x=>x.id!==c.id))} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:C.muted,alignSelf:"flex-start"}}>🗑️</button>
        </div>
      </Card>)}
    </div>
-   {showAdd && <Modal onClose={()=>setShowAdd(false)} title="Add cleaner">
+   {showAdd&&<Modal onClose={()=>setShowAdd(false)} title="Add cleaner">
      <div>
        <Field label="Full name" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="Maria Santos"/>
        <Field label="Phone" value={form.phone} onChange={v=>setForm(f=>({...f,phone:v}))} placeholder="+447700900000"/>
@@ -522,101 +736,247 @@ function TeamView({cleaners,setCleaners,properties,showToast}){
  </div>;
 }
 
+// ── MAINTENANCE ────────────────────────────────────────────────────────────────
+function MaintenanceView({maintenance,setMaintenance,properties,showToast}){
+ const open=maintenance.filter(m=>m.status==="open");
+ const resolved=maintenance.filter(m=>m.status==="resolved");
+ return <div>
+   <PH title="Maintenance" subtitle={open.length+" open issues"}/>
+   {maintenance.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>🔧 No maintenance issues reported</div>}
+   {open.length>0&&<><SectionTitle>Open issues</SectionTitle>
+   <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
+     {open.map(m=>{
+       const prop=properties.find(p=>p.id===m.propertyId);
+       return <Card key={m.id} style={{borderLeft:`4px solid ${C.coral}`}}>
+         <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+           <div style={{flex:1}}>
+             <div style={{fontWeight:700}}>{m.title}</div>
+             <div style={{fontSize:13,color:C.textSoft}}>{prop?.name} · Reported {fmt(m.date)}</div>
+             {m.description&&<div style={{fontSize:13,color:C.text,marginTop:6}}>{m.description}</div>}
+             {m.photo&&<img src={m.photo} alt="issue" style={{width:80,height:80,objectFit:"cover",borderRadius:8,marginTop:8}}/>}
+           </div>
+           <Btn onClick={()=>{setMaintenance(ms=>ms.map(x=>x.id===m.id?{...x,status:"resolved"}:x));showToast("Marked as resolved");}} small>✓ Resolve</Btn>
+         </div>
+       </Card>;
+     })}
+   </div></>}
+   {resolved.length>0&&<><SectionTitle>Resolved</SectionTitle>
+   <div style={{display:"flex",flexDirection:"column",gap:10}}>
+     {resolved.map(m=>{
+       const prop=properties.find(p=>p.id===m.propertyId);
+       return <Card key={m.id} style={{opacity:0.6}}>
+         <div style={{fontWeight:600}}>{m.title}</div>
+         <div style={{fontSize:13,color:C.textSoft}}>{prop?.name} · {fmt(m.date)}</div>
+       </Card>;
+     })}
+   </div></>}
+ </div>;
+}
+
 // ── CLEANER PORTAL ─────────────────────────────────────────────────────────────
-function CleanerPortal({cleaner,properties,cleans,setCleans,bookings,showToast,toast,onLogout}){
- const mine = cleans.filter(c=>c.cleanerId===cleaner.id).sort((a,b)=>a.date-b.date);
+function CleanerPortal({cleaner,properties,cleans,setCleans,bookings,maintenance,setMaintenance,showToast,toast,onLogout}){
+ const [tab,setTab]=useState("cleans");
+ const [selC,setSelC]=useState(null);
+ const [showMaint,setShowMaint]=useState(false);
+ const [mForm,setMForm]=useState({propertyId:"",title:"",description:"",photo:""});
+ const mine=cleans.filter(c=>c.cleanerId===cleaner.id).sort((a,b)=>new Date(a.date)-new Date(b.date));
+ const myProps=properties.filter(p=>(cleaner.assignedProperties||[]).includes(p.id));
+
+ function updateClean(id,updates){
+   setCleans(cs=>cs.map(x=>x.id===id?{...x,...updates}:x));
+ }
+
+ function handlePhoto(cid,e){
+   const file=e.target.files[0];if(!file)return;
+   const reader=new FileReader();
+   reader.onload=ev=>{
+     setCleans(cs=>cs.map(x=>x.id===cid?{...x,photos:[...(x.photos||[]),ev.target.result]}:x));
+     showToast("Photo added ✓");
+   };
+   reader.readAsDataURL(file);
+ }
+
+ function submitMaint(){
+   if(!mForm.propertyId||!mForm.title)return;
+   setMaintenance(ms=>[...ms,{...mForm,id:"m"+Date.now(),reportedBy:cleaner.id,date:new Date(),status:"open"}]);
+   setMForm({propertyId:"",title:"",description:"",photo:""});
+   setShowMaint(false);showToast("Issue reported ✓");
+ }
 
  return <div style={{minHeight:"100vh",background:C.bg}}>
-   {toast && <Toast msg={toast.msg} type={toast.type}/>}
-   <div style={{background:C.navy,padding:"18px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+   {toast&&<Toast msg={toast.msg} type={toast.type}/>}
+   <div style={{background:C.navy,padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
      <div>
        <div style={{fontSize:10,color:C.coral,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.15em"}}>CleanOps</div>
        <div style={{color:"#fff",fontWeight:700,fontSize:18}}>Hi, {cleaner.name.split(" ")[0]} 👋</div>
      </div>
-     <button onClick={onLogout} style={{background:"rgba(255,255,255,0.1)",border:"none",color:"#fff",padding:"8px 14px",borderRadius:10,cursor:"pointer",fontSize:13}}>Log out</button>
-   </div>
-   <div style={{padding:"24px 16px",maxWidth:560,margin:"0 auto"}}>
-     <div style={{display:"flex",gap:12,marginBottom:24}}>
-       <Card style={{flex:1,textAlign:"center"}}>
-         <div style={{fontSize:28,fontWeight:800,color:C.coral}}>{mine.filter(c=>c.status!=="complete").length}</div>
-         <div style={{fontSize:13,color:C.textSoft}}>Pending</div>
-       </Card>
-       <Card style={{flex:1,textAlign:"center"}}>
-         <div style={{fontSize:28,fontWeight:800,color:C.mint}}>{mine.filter(c=>c.status==="complete").length}</div>
-         <div style={{fontSize:13,color:C.textSoft}}>Done</div>
-       </Card>
+     <div style={{display:"flex",gap:8}}>
+       <button onClick={()=>setShowMaint(true)} style={{background:"rgba(255,255,255,0.1)",border:"none",color:"#fff",padding:"8px 12px",borderRadius:10,cursor:"pointer",fontSize:13}}>🔧 Report issue</button>
+       <button onClick={onLogout} style={{background:"rgba(255,255,255,0.1)",border:"none",color:"#fff",padding:"8px 12px",borderRadius:10,cursor:"pointer",fontSize:13}}>Log out</button>
      </div>
-     {mine.length===0 && <div style={{textAlign:"center",padding:"48px 0",color:C.muted}}>☀️ No cleans assigned yet</div>}
-     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-       {mine.map(c=>{
-         const prop = properties.find(p=>p.id===c.propertyId);
-         const bk = bookings.find(b=>b.id===c.bookingId);
-         return <Card key={c.id} style={{border:`1px solid ${c.status==="complete"?C.mint:C.border}`}}>
-           <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-             <div>
-               <div style={{fontWeight:700}}>{prop?.name}</div>
-               <div style={{fontSize:13,color:C.textSoft}}>📅 {fmt(c.date)}{bk?" · after "+bk.guest:""}</div>
-               {prop?.address && <div style={{fontSize:12,color:C.muted}}>📍 {prop.address}</div>}
+   </div>
+
+   <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.border}`,background:C.surface}}>
+     {["cleans","properties"].map(t=><button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"14px",border:"none",background:"transparent",fontWeight:tab===t?700:400,color:tab===t?C.navy:C.muted,fontSize:14,cursor:"pointer",borderBottom:tab===t?`2px solid ${C.navy}`:"2px solid transparent"}}>
+       {t==="cleans"?"🧹 My Cleans":"🏠 Properties"}
+     </button>)}
+   </div>
+
+   <div style={{padding:"20px 16px",maxWidth:600,margin:"0 auto"}}>
+     {tab==="cleans"&&<>
+       <div style={{display:"flex",gap:12,marginBottom:20}}>
+         <div style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",textAlign:"center"}}>
+           <div style={{fontSize:24,fontWeight:800,color:C.coral}}>{mine.filter(c=>c.status!=="complete").length}</div>
+           <div style={{fontSize:12,color:C.textSoft}}>Pending</div>
+         </div>
+         <div style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"14px",textAlign:"center"}}>
+           <div style={{fontSize:24,fontWeight:800,color:C.mint}}>{mine.filter(c=>c.status==="complete").length}</div>
+           <div style={{fontSize:12,color:C.textSoft}}>Done</div>
+         </div>
+       </div>
+       {mine.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>☀️ No cleans assigned yet</div>}
+       <div style={{display:"flex",flexDirection:"column",gap:12}}>
+         {mine.map(c=>{
+           const prop=properties.find(p=>p.id===c.propertyId);
+           const bk=bookings.find(b=>b.id===c.bookingId);
+           const checklistDone=Object.values(c.checklist||{}).filter(Boolean).length;
+           return <div key={c.id} style={{background:C.surface,border:`1px solid ${c.status==="complete"?C.mint:C.border}`,borderRadius:14,padding:"16px"}}>
+             <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
+               <div>
+                 <div style={{fontWeight:700,fontSize:15}}>{prop?.name}</div>
+                 <div style={{fontSize:13,color:C.textSoft}}>📅 {fmt(c.date)}{bk?" · after "+bk.guest:""}</div>
+                 {prop?.address&&<div style={{fontSize:12,color:C.muted}}>📍 {prop.address}</div>}
+               </div>
+               <span style={pill(c.status)}>{c.status}</span>
              </div>
-             <span style={pill(c.status)}>{c.status}</span>
+
+             {prop?.instructions&&<div style={{background:"#F0F6FF",borderRadius:10,padding:"10px 12px",marginBottom:12,fontSize:13}}>
+               <div style={{fontWeight:700,marginBottom:4,fontSize:11,color:C.navy,textTransform:"uppercase"}}>Property instructions</div>
+               {prop.instructions}
+             </div>}
+
+             {c.status!=="pending"&&<>
+               <div style={{marginBottom:12}}>
+                 <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:8}}>CHECKLIST ({checklistDone}/{CHECKLIST_ITEMS.length})</div>
+                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                   {CHECKLIST_ITEMS.map(item=><button key={item} onClick={()=>updateClean(c.id,{checklist:{...(c.checklist||{}),[item]:!c.checklist?.[item]}})} style={{display:"flex",alignItems:"center",gap:8,background:c.checklist?.[item]?"#E8FAF4":C.bg,border:`1px solid ${c.checklist?.[item]?C.mint:C.border}`,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
+                     <div style={{width:16,height:16,borderRadius:4,background:c.checklist?.[item]?C.mint:C.border,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                       {c.checklist?.[item]&&<span style={{color:"#fff",fontSize:11}}>✓</span>}
+                     </div>
+                     <span style={{fontSize:11}}>{item}</span>
+                   </button>)}
+                 </div>
+               </div>
+
+               <div style={{marginBottom:12}}>
+                 <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:6}}>NOTES</div>
+                 <textarea value={c.notes||""} onChange={e=>updateClean(c.id,{notes:e.target.value})} placeholder="Any notes about this clean..." rows={2} style={{width:"100%",padding:"8px 12px",borderRadius:8,border:`1px solid ${C.border}`,fontSize:13,resize:"vertical"}}/>
+               </div>
+
+               <div style={{marginBottom:12}}>
+                 <div style={{fontSize:12,fontWeight:700,color:C.muted,marginBottom:6}}>PHOTOS ({c.photos?.length||0})</div>
+                 <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                   {(c.photos||[]).map((ph,i)=><img key={i} src={ph} alt="" style={{width:60,height:60,objectFit:"cover",borderRadius:8}}/>)}
+                   <label style={{width:60,height:60,borderRadius:8,border:`2px dashed ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:24,color:C.muted}}>
+                     +<input type="file" accept="image/*" capture="environment" onChange={e=>handlePhoto(c.id,e)} style={{display:"none"}}/>
+                   </label>
+                 </div>
+               </div>
+             </>}
+
+             <div style={{display:"flex",gap:8}}>
+               {c.status==="pending"&&<Btn onClick={()=>updateClean(c.id,{status:"in-progress"})} small secondary>🧹 Start</Btn>}
+               {c.status==="in-progress"&&<Btn onClick={()=>updateClean(c.id,{status:"complete"})} small>✓ Mark complete</Btn>}
+               {c.status==="complete"&&<div style={{color:C.mint,fontSize:13,fontWeight:600}}>✓ Completed</div>}
+             </div>
+           </div>;
+         })}
+       </div>
+     </>}
+
+     {tab==="properties"&&<>
+       {myProps.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>No properties assigned</div>}
+       <div style={{display:"flex",flexDirection:"column",gap:12}}>
+         {myProps.map(p=><Card key={p.id}>
+           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+             <div style={{width:10,height:10,borderRadius:"50%",background:p.color}}/>
+             <div style={{fontWeight:700,fontSize:15}}>{p.name}</div>
            </div>
-           {c.status==="pending" && <Btn onClick={()=>{setCleans(cs=>cs.map(x=>x.id===c.id?{...x,status:"in-progress"}:x));showToast("Started!");}} small secondary>🧹 Start</Btn>}
-           {c.status==="in-progress" && <Btn onClick={()=>{setCleans(cs=>cs.map(x=>x.id===c.id?{...x,status:"complete"}:x));showToast("Complete ✓");}} small>✓ Done</Btn>}
-           {c.status==="complete" && <div style={{color:C.mint,fontSize:13,fontWeight:600}}>✓ Done</div>}
-         </Card>;
-       })}
-     </div>
+           <div style={{fontSize:13,color:C.textSoft,marginBottom:p.instructions?8:0}}>📍 {p.address||"No address"}</div>
+           {p.instructions&&<div style={{background:"#F0F6FF",borderRadius:10,padding:"10px 12px",fontSize:13}}>
+             <div style={{fontWeight:700,marginBottom:4,fontSize:11,color:C.navy,textTransform:"uppercase"}}>Cleaning instructions</div>
+             {p.instructions}
+           </div>}
+         </Card>)}
+       </div>
+     </>}
    </div>
+
+   {showMaint&&<Modal onClose={()=>setShowMaint(false)} title="Report maintenance issue">
+     <div>
+       <div style={{marginBottom:12}}>
+         <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Property</label>
+         <select value={mForm.propertyId} onChange={e=>setMForm(f=>({...f,propertyId:e.target.value}))} style={{width:"100%",padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,background:C.bg}}>
+           <option value="">Select property...</option>
+           {myProps.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+         </select>
+       </div>
+       <Field label="Issue title" value={mForm.title} onChange={v=>setMForm(f=>({...f,title:v}))} placeholder="e.g. Broken shower head"/>
+       <Field label="Description" value={mForm.description} onChange={v=>setMForm(f=>({...f,description:v}))} placeholder="More details..." multiline/>
+       <div style={{marginBottom:12}}>
+         <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:6}}>Photo (optional)</label>
+         <label style={{display:"inline-block",padding:"8px 16px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",fontSize:13}}>
+           📷 Take photo<input type="file" accept="image/*" capture="environment" onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setMForm(x=>({...x,photo:ev.target.result}));r.readAsDataURL(f);}} style={{display:"none"}}/>
+         </label>
+         {mForm.photo&&<img src={mForm.photo} alt="" style={{width:60,height:60,objectFit:"cover",borderRadius:8,marginLeft:8,verticalAlign:"middle"}}/>}
+       </div>
+       <div style={{display:"flex",gap:10}}><Btn onClick={submitMaint}>Submit</Btn><Btn onClick={()=>setShowMaint(false)} secondary>Cancel</Btn></div>
+     </div>
+   </Modal>}
  </div>;
 }
 
 // ── APP ROOT ───────────────────────────────────────────────────────────────────
-function load(key,def){
- try{const v=localStorage.getItem("co_"+key);if(v){const p=JSON.parse(v);
-   // restore Date objects for bookings and cleans
-   if(key==="bookings") return p.map(b=>({...b,checkin:new Date(b.checkin),checkout:new Date(b.checkout)}));
-   if(key==="cleans")   return p.map(c=>({...c,date:new Date(c.date)}));
-   return p;}
- }catch(e){}
- return def;
-}
-function save(key,val){try{localStorage.setItem("co_"+key,JSON.stringify(val));}catch(e){}}
-
 function App(){
- const [role,setRole] = useState(null);
- const [cleaner,setCleaner] = useState(null);
- const [properties,setProperties] = useState(()=>load("properties",[]));
- const [cleaners,setCleaners] = useState(()=>load("cleaners",[]));
- const [bookings,setBookings] = useState(()=>load("bookings",[]));
- const [cleans,setCleans] = useState(()=>load("cleans",[]));
- const [earnings,setEarnings] = useState(()=>load("earnings",[]));
- const [tab,setTab] = useState("diary");
- const [toast,setToast] = useState(null);
+ const [role,setRole]=useState(null);
+ const [cleaner,setCleaner]=useState(null);
+ const [properties,setProperties]=useState(()=>load("properties",[]));
+ const [cleaners,setCleaners]=useState(()=>load("cleaners",[]));
+ const [bookings,setBookings]=useState(()=>load("bookings",[]));
+ const [cleans,setCleans]=useState(()=>load("cleans",[]));
+ const [earnings,setEarnings]=useState(()=>load("earnings",[]));
+ const [expenses,setExpenses]=useState(()=>load("expenses",[]));
+ const [maintenance,setMaintenance]=useState(()=>load("maintenance",[]));
+ const [tab,setTab]=useState("diary");
+ const [toast,setToast]=useState(null);
 
- // Auto-save whenever data changes
- React.useEffect(()=>save("properties",properties),[properties]);
- React.useEffect(()=>save("cleaners",cleaners),[cleaners]);
- React.useEffect(()=>save("bookings",bookings),[bookings]);
- React.useEffect(()=>save("cleans",cleans),[cleans]);
- React.useEffect(()=>save("earnings",earnings),[earnings]);
+ useEffect(()=>save("properties",properties),[properties]);
+ useEffect(()=>save("cleaners",cleaners),[cleaners]);
+ useEffect(()=>save("bookings",bookings),[bookings]);
+ useEffect(()=>save("cleans",cleans),[cleans]);
+ useEffect(()=>save("earnings",earnings),[earnings]);
+ useEffect(()=>save("expenses",expenses),[expenses]);
+ useEffect(()=>save("maintenance",maintenance),[maintenance]);
 
- function showToast(msg,type="success"){
-   setToast({msg,type});
-   setTimeout(()=>setToast(null),3000);
- }
+ function showToast(msg,type="success"){setToast({msg,type});setTimeout(()=>setToast(null),3000);}
+
+ const openMaintenance=maintenance.filter(m=>m.status==="open").length;
 
  if(!role) return <Login cleaners={cleaners} setRole={setRole} setCleaner={setCleaner}/>;
- if(role==="cleaner") return <CleanerPortal cleaner={cleaner} properties={properties} cleans={cleans} setCleans={setCleans} bookings={bookings} showToast={showToast} toast={toast} onLogout={()=>{setRole(null);setCleaner(null);}}/>;
+ if(role==="cleaner") return <CleanerPortal cleaner={cleaner} properties={properties} cleans={cleans} setCleans={setCleans} bookings={bookings} maintenance={maintenance} setMaintenance={setMaintenance} showToast={showToast} toast={toast} onLogout={()=>{setRole(null);setCleaner(null);}}/>;
 
  return <div style={{minHeight:"100vh",background:C.bg}}>
-   {toast && <Toast msg={toast.msg} type={toast.type}/>}
-   <Sidebar tab={tab} setTab={setTab} onLogout={()=>setRole(null)}/>
+   {toast&&<Toast msg={toast.msg} type={toast.type}/>}
+   <Sidebar tab={tab} setTab={setTab} onLogout={()=>setRole(null)} maintenanceCount={openMaintenance}/>
    <div style={{marginLeft:200,padding:"28px 32px",maxWidth:1080}}>
-     {tab==="diary"      && <DiaryView      properties={properties} bookings={bookings} setBookings={setBookings} cleans={cleans} setCleans={setCleans} cleaners={cleaners} showToast={showToast}/>}
-     {tab==="cleans"     && <CleansView     cleans={cleans} setCleans={setCleans} properties={properties} cleaners={cleaners} bookings={bookings} showToast={showToast}/>}
-     {tab==="earnings"   && <EarningsView   properties={properties} earnings={earnings} setEarnings={setEarnings} showToast={showToast}/>}
-     {tab==="properties" && <PropertiesView properties={properties} setProperties={setProperties} showToast={showToast}/>}
-     {tab==="team"       && <TeamView       cleaners={cleaners} setCleaners={setCleaners} properties={properties} showToast={showToast}/>}
+     {tab==="diary"       && <DiaryView       properties={properties} bookings={bookings} setBookings={setBookings} cleans={cleans} setCleans={setCleans} cleaners={cleaners} showToast={showToast}/>}
+     {tab==="cleans"      && <CleansView      cleans={cleans} setCleans={setCleans} properties={properties} cleaners={cleaners} bookings={bookings} showToast={showToast}/>}
+     {tab==="occupancy"   && <OccupancyView   properties={properties} bookings={bookings}/>}
+     {tab==="earnings"    && <EarningsView    properties={properties} earnings={earnings} setEarnings={setEarnings} showToast={showToast}/>}
+     {tab==="expenses"    && <ExpensesView    properties={properties} expenses={expenses} setExpenses={setExpenses} showToast={showToast}/>}
+     {tab==="properties"  && <PropertiesView  properties={properties} setProperties={setProperties} showToast={showToast}/>}
+     {tab==="team"        && <TeamView        cleaners={cleaners} setCleaners={setCleaners} properties={properties} showToast={showToast}/>}
+     {tab==="maintenance" && <MaintenanceView maintenance={maintenance} setMaintenance={setMaintenance} properties={properties} showToast={showToast}/>}
    </div>
  </div>;
 }
