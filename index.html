@@ -571,16 +571,34 @@ function CleanerPortal({cleaner,properties,cleans,setCleans,bookings,showToast,t
 }
 
 // ── APP ROOT ───────────────────────────────────────────────────────────────────
+function load(key,def){
+ try{const v=localStorage.getItem("co_"+key);if(v){const p=JSON.parse(v);
+   // restore Date objects for bookings and cleans
+   if(key==="bookings") return p.map(b=>({...b,checkin:new Date(b.checkin),checkout:new Date(b.checkout)}));
+   if(key==="cleans")   return p.map(c=>({...c,date:new Date(c.date)}));
+   return p;}
+ }catch(e){}
+ return def;
+}
+function save(key,val){try{localStorage.setItem("co_"+key,JSON.stringify(val));}catch(e){}}
+
 function App(){
  const [role,setRole] = useState(null);
  const [cleaner,setCleaner] = useState(null);
- const [properties,setProperties] = useState([]);
- const [cleaners,setCleaners] = useState([]);
- const [bookings,setBookings] = useState([]);
- const [cleans,setCleans] = useState([]);
- const [earnings,setEarnings] = useState([]);
+ const [properties,setProperties] = useState(()=>load("properties",[]));
+ const [cleaners,setCleaners] = useState(()=>load("cleaners",[]));
+ const [bookings,setBookings] = useState(()=>load("bookings",[]));
+ const [cleans,setCleans] = useState(()=>load("cleans",[]));
+ const [earnings,setEarnings] = useState(()=>load("earnings",[]));
  const [tab,setTab] = useState("diary");
  const [toast,setToast] = useState(null);
+
+ // Auto-save whenever data changes
+ React.useEffect(()=>save("properties",properties),[properties]);
+ React.useEffect(()=>save("cleaners",cleaners),[cleaners]);
+ React.useEffect(()=>save("bookings",bookings),[bookings]);
+ React.useEffect(()=>save("cleans",cleans),[cleans]);
+ React.useEffect(()=>save("earnings",earnings),[earnings]);
 
  function showToast(msg,type="success"){
    setToast({msg,type});
