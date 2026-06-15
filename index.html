@@ -139,7 +139,7 @@ function Login({cleaners,setRole,setCleaner}){
 }
 
 // ── SIDEBAR ────────────────────────────────────────────────────────────────────
-function Sidebar({tab,setTab,onLogout,maintenanceCount}){
+function Sidebar({tab,setTab,onLogout,maintenanceCount,unreadCount}){
  const items=[
    {id:"diary",label:"Diary",icon:"📅"},
    {id:"cleans",label:"Cleans",icon:"🧹"},
@@ -149,6 +149,7 @@ function Sidebar({tab,setTab,onLogout,maintenanceCount}){
    {id:"properties",label:"Properties",icon:"🏠"},
    {id:"team",label:"Team",icon:"👥"},
    {id:"maintenance",label:"Maintenance",icon:"🔧",badge:maintenanceCount},
+   {id:"messages",label:"Messages",icon:"💬",badge:unreadCount},
  ];
  return <div style={{position:"fixed",left:0,top:0,bottom:0,width:200,background:C.navy,display:"flex",flexDirection:"column",padding:"20px 0",zIndex:50,overflowY:"auto"}}>
    <div style={{padding:"0 16px 20px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
@@ -774,13 +775,23 @@ function MaintenanceView({maintenance,setMaintenance,properties,showToast}){
 }
 
 // ── CLEANER PORTAL ─────────────────────────────────────────────────────────────
-function CleanerPortal({cleaner,properties,cleans,setCleans,bookings,maintenance,setMaintenance,showToast,toast,onLogout}){
+function CleanerPortal({cleaner,properties,cleans,setCleans,bookings,maintenance,setMaintenance,messages,setMessages,showToast,toast,onLogout}){
  const [tab,setTab]=useState("cleans");
  const [selC,setSelC]=useState(null);
  const [showMaint,setShowMaint]=useState(false);
  const [mForm,setMForm]=useState({propertyId:"",title:"",description:"",photo:""});
+ const [msgText,setMsgText]=useState("");
  const mine=cleans.filter(c=>c.cleanerId===cleaner.id).sort((a,b)=>new Date(a.date)-new Date(b.date));
  const myProps=properties.filter(p=>(cleaner.assignedProperties||[]).includes(p.id));
+ const myMessages=messages.filter(m=>(m.from==="manager"&&m.to===cleaner.id)||(m.from===cleaner.id&&m.to==="manager")).sort((a,b)=>new Date(a.date)-new Date(b.date));
+ const unreadCount=messages.filter(m=>m.from==="manager"&&m.to===cleaner.id&&!m.read).length;
+
+ function sendMsg(){
+   if(!msgText.trim())return;
+   setMessages(ms=>[...ms,{id:"msg"+Date.now(),from:cleaner.id,to:"manager",text:msgText,date:new Date(),read:false}]);
+   setMsgText("");
+   showToast("Message sent ✓");
+ }
 
  function updateClean(id,updates){
    setCleans(cs=>cs.map(x=>x.id===id?{...x,...updates}:x));
@@ -817,8 +828,9 @@ function CleanerPortal({cleaner,properties,cleans,setCleans,bookings,maintenance
    </div>
 
    <div style={{display:"flex",gap:0,borderBottom:`1px solid ${C.border}`,background:C.surface}}>
-     {["cleans","properties"].map(t=><button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"14px",border:"none",background:"transparent",fontWeight:tab===t?700:400,color:tab===t?C.navy:C.muted,fontSize:14,cursor:"pointer",borderBottom:tab===t?`2px solid ${C.navy}`:"2px solid transparent"}}>
-       {t==="cleans"?"🧹 My Cleans":"🏠 Properties"}
+     {["cleans","properties","messages"].map(t=><button key={t} onClick={()=>{setTab(t);if(t==="messages")setMessages(ms=>ms.map(m=>m.to===cleaner.id?{...m,read:true}:m));}} style={{flex:1,padding:"14px",border:"none",background:"transparent",fontWeight:tab===t?700:400,color:tab===t?C.navy:C.muted,fontSize:14,cursor:"pointer",borderBottom:tab===t?`2px solid ${C.navy}`:"2px solid transparent",position:"relative"}}>
+       {t==="cleans"?"🧹 My Cleans":t==="properties"?"🏠 Properties":"💬 Messages"}
+       {t==="messages"&&unreadCount>0&&<span style={{background:C.coral,color:"#fff",borderRadius:99,fontSize:10,fontWeight:700,padding:"1px 5px",marginLeft:4}}>{unreadCount}</span>}
      </button>)}
    </div>
 
@@ -894,6 +906,22 @@ function CleanerPortal({cleaner,properties,cleans,setCleans,bookings,maintenance
        </div>
      </>}
 
+     {tab==="messages"&&<div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 200px)"}}>
+       <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10,paddingBottom:8}}>
+         {myMessages.length===0&&<div style={{textAlign:"center",color:C.muted,marginTop:60}}>No messages yet</div>}
+         {myMessages.map(m=>{
+           const isMe=m.from===cleaner.id;
+           return <div key={m.id} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
+             <div style={{fontSize:11,color:C.muted,marginBottom:3}}>{isMe?"You":"Evan"} · {new Date(m.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
+             <div style={{background:isMe?C.navy:"#F0F0F5",color:isMe?"#fff":C.text,borderRadius:isMe?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",maxWidth:"75%",fontSize:14,lineHeight:1.5}}>{m.text}</div>
+           </div>;
+         })}
+       </div>
+       <div style={{display:"flex",gap:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+         <input value={msgText} onChange={e=>setMsgText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendMsg()} placeholder="Message Evan..." style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,outline:"none"}}/>
+         <Btn onClick={sendMsg}>Send</Btn>
+       </div>
+     </div>}
      {tab==="properties"&&<>
        {myProps.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:C.muted}}>No properties assigned</div>}
        <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -936,6 +964,120 @@ function CleanerPortal({cleaner,properties,cleans,setCleans,bookings,maintenance
  </div>;
 }
 
+// ── MESSAGES ───────────────────────────────────────────────────────────────────
+function MessagesView({messages,setMessages,cleaners,cleans,properties,bookings,showToast}){
+ const [selId,setSelId]=useState(cleaners[0]?.id||null);
+ const [text,setText]=useState("");
+ const [subTab,setSubTab]=useState("messages"); // messages | history
+
+ const selCleaner=cleaners.find(c=>c.id===selId);
+ const thread=messages.filter(m=>(m.to===selId&&m.from==="manager")||(m.from===selId&&m.to==="manager")).sort((a,b)=>new Date(a.date)-new Date(b.date));
+ const cleanerCleans=cleans.filter(c=>c.cleanerId===selId).sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+ function send(){
+   if(!text.trim()||!selId)return;
+   setMessages(ms=>[...ms,{id:"msg"+Date.now(),from:"manager",to:selId,text,date:new Date(),read:true}]);
+   setText("");
+   showToast("Message sent ✓");
+ }
+
+ function selectCleaner(id){
+   setSelId(id);
+   setSubTab("messages");
+   // mark their messages as read
+   setMessages(ms=>ms.map(m=>m.from===id?{...m,read:true}:m));
+ }
+
+ if(cleaners.length===0) return <div><PH title="Messages"/><div style={{textAlign:"center",padding:"60px 0",color:C.muted}}>👥 Add cleaners first to start messaging</div></div>;
+
+ return <div style={{height:"calc(100vh - 60px)",display:"flex",gap:0}}>
+   {/* Cleaner list sidebar */}
+   <div style={{width:220,background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,marginRight:16,overflow:"hidden",flexShrink:0,display:"flex",flexDirection:"column"}}>
+     <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.border}`,fontWeight:700,fontSize:15}}>💬 Messages</div>
+     <div style={{overflowY:"auto",flex:1}}>
+       {cleaners.map(c=>{
+         const unread=messages.filter(m=>m.from===c.id&&!m.read).length;
+         const lastMsg=messages.filter(m=>m.to===c.id||m.from===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+         const completedCleans=cleans.filter(x=>x.cleanerId===c.id&&x.status==="complete").length;
+         return <button key={c.id} onClick={()=>selectCleaner(c.id)} style={{width:"100%",padding:"12px 14px",border:"none",borderBottom:`1px solid ${C.border}`,background:selId===c.id?"#EEF1F7":"transparent",textAlign:"left",cursor:"pointer"}}>
+           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+             <div style={{fontWeight:selId===c.id?700:500,fontSize:14}}>{c.name}</div>
+             {unread>0&&<span style={{background:C.coral,color:"#fff",borderRadius:99,fontSize:10,fontWeight:700,padding:"1px 6px"}}>{unread}</span>}
+           </div>
+           <div style={{fontSize:11,color:C.muted}}>{completedCleans} cleans done</div>
+           {lastMsg&&<div style={{fontSize:11,color:C.muted,marginTop:2,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{lastMsg.from==="manager"?"You: ":""}{lastMsg.text}</div>}
+         </button>;
+       })}
+     </div>
+   </div>
+
+   {/* Main panel */}
+   <div style={{flex:1,display:"flex",flexDirection:"column",background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}>
+     {/* Header */}
+     <div style={{padding:"14px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+       <div>
+         <div style={{fontWeight:700,fontSize:16}}>{selCleaner?.name}</div>
+         <div style={{fontSize:12,color:C.muted}}>{selCleaner?.phone} · PIN: {selCleaner?.pin}</div>
+       </div>
+       <div style={{display:"flex",gap:4,background:C.bg,borderRadius:10,padding:4}}>
+         {["messages","history"].map(t=><button key={t} onClick={()=>setSubTab(t)} style={{padding:"6px 14px",borderRadius:8,border:"none",fontSize:13,fontWeight:600,background:subTab===t?C.surface:"transparent",color:subTab===t?C.text:C.muted,cursor:"pointer"}}>{t==="messages"?"💬 Chat":"📋 Clean History"}</button>)}
+       </div>
+     </div>
+
+     {subTab==="messages"&&<>
+       {/* Messages */}
+       <div style={{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:10}}>
+         {thread.length===0&&<div style={{textAlign:"center",color:C.muted,marginTop:60}}>No messages yet — say hi 👋</div>}
+         {thread.map(m=>{
+           const isMe=m.from==="manager";
+           return <div key={m.id} style={{display:"flex",flexDirection:"column",alignItems:isMe?"flex-end":"flex-start"}}>
+             <div style={{fontSize:11,color:C.muted,marginBottom:3}}>{isMe?"You":selCleaner?.name} · {new Date(m.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</div>
+             <div style={{background:isMe?C.navy:"#F0F0F5",color:isMe?"#fff":C.text,borderRadius:isMe?"14px 14px 4px 14px":"14px 14px 14px 4px",padding:"10px 14px",maxWidth:"70%",fontSize:14,lineHeight:1.5}}>{m.text}</div>
+           </div>;
+         })}
+       </div>
+       {/* Input */}
+       <div style={{padding:12,borderTop:`1px solid ${C.border}`,display:"flex",gap:8}}>
+         <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder={`Message ${selCleaner?.name}...`} style={{flex:1,padding:"10px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:14,outline:"none"}}/>
+         <Btn onClick={send}>Send</Btn>
+       </div>
+     </>}
+
+     {subTab==="history"&&<div style={{flex:1,overflowY:"auto",padding:16}}>
+       {cleanerCleans.length===0&&<div style={{textAlign:"center",color:C.muted,marginTop:60}}>No cleans yet</div>}
+       <div style={{display:"flex",flexDirection:"column",gap:14}}>
+         {cleanerCleans.map(c=>{
+           const prop=properties.find(p=>p.id===c.propertyId);
+           const bk=bookings.find(b=>b.id===c.bookingId);
+           const done=Object.values(c.checklist||{}).filter(Boolean).length;
+           return <div key={c.id} style={{background:C.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${c.status==="complete"?C.mint:C.border}`}}>
+             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+               <div>
+                 <div style={{fontWeight:700,fontSize:14}}>{prop?.name}</div>
+                 <div style={{fontSize:13,color:C.textSoft}}>{fmt(c.date)}{bk?" · after "+bk.guest:""}</div>
+               </div>
+               <span style={pill(c.status)}>{c.status}</span>
+             </div>
+             {/* Checklist summary */}
+             {done>0&&<div style={{fontSize:12,color:C.mint,marginBottom:8}}>✓ {done}/{CHECKLIST_ITEMS.length} tasks completed</div>}
+             {/* Notes */}
+             {c.notes&&<div style={{fontSize:13,color:C.textSoft,background:C.surface,borderRadius:8,padding:"8px 10px",marginBottom:8}}>📝 {c.notes}</div>}
+             {/* Photos */}
+             {c.photos?.length>0&&<div>
+               <div style={{fontSize:11,fontWeight:700,color:C.muted,marginBottom:6}}>PHOTOS</div>
+               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                 {c.photos.map((ph,i)=><img key={i} src={ph} alt="clean photo" style={{width:80,height:80,objectFit:"cover",borderRadius:8,border:`1px solid ${C.border}`}}/>)}
+               </div>
+             </div>}
+             {!c.photos?.length&&c.status==="complete"&&<div style={{fontSize:12,color:C.muted}}>No photos uploaded</div>}
+           </div>;
+         })}
+       </div>
+     </div>}
+   </div>
+ </div>;
+}
+
 // ── APP ROOT ───────────────────────────────────────────────────────────────────
 function App(){
  const [role,setRole]=useState(null);
@@ -947,6 +1089,7 @@ function App(){
  const [earnings,setEarnings]=useState(()=>load("earnings",[]));
  const [expenses,setExpenses]=useState(()=>load("expenses",[]));
  const [maintenance,setMaintenance]=useState(()=>load("maintenance",[]));
+ const [messages,setMessages]=useState(()=>load("messages",[]));
  const [tab,setTab]=useState("diary");
  const [toast,setToast]=useState(null);
 
@@ -957,18 +1100,20 @@ function App(){
  useEffect(()=>save("earnings",earnings),[earnings]);
  useEffect(()=>save("expenses",expenses),[expenses]);
  useEffect(()=>save("maintenance",maintenance),[maintenance]);
+ useEffect(()=>save("messages",messages),[messages]);
 
  function showToast(msg,type="success"){setToast({msg,type});setTimeout(()=>setToast(null),3000);}
 
  const openMaintenance=maintenance.filter(m=>m.status==="open").length;
+ const unreadMessages=messages.filter(m=>m.from!=="manager"&&!m.read).length;
 
  if(!role) return <Login cleaners={cleaners} setRole={setRole} setCleaner={setCleaner}/>;
- if(role==="cleaner") return <CleanerPortal cleaner={cleaner} properties={properties} cleans={cleans} setCleans={setCleans} bookings={bookings} maintenance={maintenance} setMaintenance={setMaintenance} showToast={showToast} toast={toast} onLogout={()=>{setRole(null);setCleaner(null);}}/>;
+ if(role==="cleaner") return <CleanerPortal cleaner={cleaner} properties={properties} cleans={cleans} setCleans={setCleans} bookings={bookings} maintenance={maintenance} setMaintenance={setMaintenance} messages={messages} setMessages={setMessages} showToast={showToast} toast={toast} onLogout={()=>{setRole(null);setCleaner(null);}}/>;
 
  return <div style={{minHeight:"100vh",background:C.bg}}>
    {toast&&<Toast msg={toast.msg} type={toast.type}/>}
-   <Sidebar tab={tab} setTab={setTab} onLogout={()=>setRole(null)} maintenanceCount={openMaintenance}/>
-   <div style={{marginLeft:200,padding:"28px 32px",maxWidth:1080}}>
+   <Sidebar tab={tab} setTab={setTab} onLogout={()=>setRole(null)} maintenanceCount={openMaintenance} unreadCount={unreadMessages}/>
+   <div style={{marginLeft:200,padding:"28px 32px",maxWidth:tab==="messages"?1200:1080}}>
      {tab==="diary"       && <DiaryView       properties={properties} bookings={bookings} setBookings={setBookings} cleans={cleans} setCleans={setCleans} cleaners={cleaners} showToast={showToast}/>}
      {tab==="cleans"      && <CleansView      cleans={cleans} setCleans={setCleans} properties={properties} cleaners={cleaners} bookings={bookings} showToast={showToast}/>}
      {tab==="occupancy"   && <OccupancyView   properties={properties} bookings={bookings}/>}
@@ -977,6 +1122,7 @@ function App(){
      {tab==="properties"  && <PropertiesView  properties={properties} setProperties={setProperties} showToast={showToast}/>}
      {tab==="team"        && <TeamView        cleaners={cleaners} setCleaners={setCleaners} properties={properties} showToast={showToast}/>}
      {tab==="maintenance" && <MaintenanceView maintenance={maintenance} setMaintenance={setMaintenance} properties={properties} showToast={showToast}/>}
+     {tab==="messages"    && <MessagesView    messages={messages} setMessages={setMessages} cleaners={cleaners} cleans={cleans} properties={properties} bookings={bookings} showToast={showToast}/>}
    </div>
  </div>;
 }
