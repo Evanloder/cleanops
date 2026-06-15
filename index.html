@@ -170,16 +170,46 @@ function Sidebar({tab,setTab,onLogout,maintenanceCount,unreadCount}){
 
 // ── DIARY ──────────────────────────────────────────────────────────────────────
 function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,showToast}){
- const [wo,setWo]=useState(0);
+ const [yr,setYr]=useState(today.getFullYear());
+ const [mo,setMo]=useState(today.getMonth());
+ const [selDay,setSelDay]=useState(null);
  const [showAdd,setShowAdd]=useState(false);
  const [editB,setEditB]=useState(null);
- const [selB,setSelB]=useState(null);
  const [bForm,setBForm]=useState({propertyId:"",guest:"",checkin:"",checkout:"",notes:"",rating:""});
 
- const ws=new Date(today); ws.setDate(today.getDate()-today.getDay()+1+wo*7);
- const days=Array.from({length:7},(_,i)=>{const d=new Date(ws);d.setDate(ws.getDate()+i);return d;});
- const upcoming=bookings.filter(b=>new Date(b.checkout)>today&&new Date(b.checkout)<=dd(7)).sort((a,b)=>new Date(a.checkout)-new Date(b.checkout));
- const todayOuts=bookings.filter(b=>sameDay(b.checkout,today));
+ const firstDay=new Date(yr,mo,1).getDay();
+ const startOffset=(firstDay+6)%7;
+ const daysInMonth=new Date(yr,mo+1,0).getDate();
+ const totalCells=Math.ceil((startOffset+daysInMonth)/7)*7;
+ const weeks=totalCells/7;
+
+ function prevMonth(){let m=mo-1,y=yr;if(m<0){m=11;y--;}setMo(m);setYr(y);setSelDay(null);}
+ function nextMonth(){let m=mo+1,y=yr;if(m>11){m=0;y++;}setMo(m);setYr(y);setSelDay(null);}
+
+ function cellDate(i){const n=i-startOffset+1;return(n>=1&&n<=daysInMonth)?new Date(yr,mo,n):null;}
+
+ function getBarsForWeek(wi){
+   const weekCells=Array.from({length:7},(_,i)=>cellDate(wi*7+i));
+   const firstD=weekCells.find(Boolean);
+   const lastD=[...weekCells].reverse().find(Boolean);
+   if(!firstD||!lastD) return [];
+   const wb=bookings.filter(b=>{
+     const cin=new Date(b.checkin),cout=new Date(b.checkout);
+     return cin<new Date(lastD.getFullYear(),lastD.getMonth(),lastD.getDate()+1)&&cout>firstD;
+   });
+   const lanes=[];
+   wb.forEach(b=>{
+     const cin=new Date(b.checkin),cout=new Date(b.checkout);
+     const sc=weekCells.findIndex(d=>d&&(sameDay(d,cin)||d>cin));
+     const ec=weekCells.reduce((last,d,i)=>{if(d&&d<cout)return i;return last;},-1);
+     if(sc===-1||ec===-1)return;
+     let lane=0;
+     while(lanes[lane]&&lanes[lane].some(({s,e})=>s<=ec&&e>=sc))lane++;
+     if(!lanes[lane])lanes[lane]=[];
+     lanes[lane].push({b,sc,ec});
+   });
+   return lanes;
+ }
 
  function notify(b){
    const p=properties.find(x=>x.id===b.propertyId);
@@ -201,12 +231,12 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
 
  function saveBooking(){
    if(!bForm.propertyId||!bForm.guest||!bForm.checkin||!bForm.checkout)return;
-   const cin=new Date(bForm.checkin); cin.setHours(15,0,0,0);
-   const cout=new Date(bForm.checkout); cout.setHours(11,0,0,0);
+   const cin=new Date(bForm.checkin);cin.setHours(15,0,0,0);
+   const cout=new Date(bForm.checkout);cout.setHours(11,0,0,0);
    if(editB){
      setBookings(bs=>bs.map(x=>x.id===editB.id?{...x,propertyId:bForm.propertyId,guest:bForm.guest,checkin:cin,checkout:cout,notes:bForm.notes,rating:bForm.rating}:x));
      showToast("Booking updated");setEditB(null);
-   } else {
+   }else{
      setBookings(bs=>[...bs,{id:"b"+Date.now(),propertyId:bForm.propertyId,guest:bForm.guest,checkin:cin,checkout:cout,notes:bForm.notes,rating:bForm.rating,notified:false}]);
      showToast("Booking added");
    }
@@ -219,94 +249,110 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
    setEditB(b);setShowAdd(true);
  }
 
- return <div>
-   <PH title="Booking Diary" subtitle={fmtS(days[0])+" – "+fmtS(days[6])}>
-     <Btn onClick={()=>setWo(w=>w-1)} secondary small>← Prev</Btn>
-     <Btn onClick={()=>setWo(0)} secondary small>Today</Btn>
-     <Btn onClick={()=>setWo(w=>w+1)} secondary small>Next →</Btn>
-     <Btn onClick={()=>{setEditB(null);setBForm({propertyId:"",guest:"",checkin:"",checkout:"",notes:"",rating:""});setShowAdd(true);}}>+ Booking</Btn>
-   </PH>
+ const todayOuts=bookings.filter(b=>sameDay(b.checkout,today));
+ const selDayBookings=selDay?bookings.filter(b=>new Date(b.checkin)<=selDay&&new Date(b.checkout)>selDay):[];
 
-   {todayOuts.length>0&&<div style={{background:"#FFF3F1",border:`1px solid ${C.coral}`,borderRadius:12,padding:"12px 16px",marginBottom:20,display:"flex",gap:10}}>
+ return <div>
+   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+     <h1 style={{fontSize:26,fontWeight:800}}>{MONTHS[mo]} <span style={{color:C.muted,fontWeight:300,fontSize:22}}>{yr}</span></h1>
+     <div style={{display:"flex",gap:8}}>
+       <button onClick={prevMonth} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,width:36,height:36,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+       <button onClick={()=>{setMo(today.getMonth());setYr(today.getFullYear());setSelDay(null);}} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"0 14px",height:36,cursor:"pointer",fontSize:13,fontWeight:600}}>Today</button>
+       <button onClick={nextMonth} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,width:36,height:36,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+       <Btn onClick={()=>{setEditB(null);setBForm({propertyId:"",guest:"",checkin:"",checkout:"",notes:"",rating:""});setShowAdd(true);}}>+ Booking</Btn>
+     </div>
+   </div>
+
+   {todayOuts.length>0&&<div style={{background:"#FFF3F1",border:`1px solid ${C.coral}`,borderRadius:12,padding:"12px 16px",marginBottom:16,display:"flex",gap:10}}>
      <span>🔔</span>
      <div><div style={{fontWeight:700,color:C.coral,fontSize:13}}>Checkouts today</div>
      <div style={{color:C.textSoft,fontSize:13}}>{todayOuts.map(b=>b.guest).join(", ")}</div></div>
    </div>}
 
-   <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,overflow:"auto",marginBottom:24}}>
-     <table style={{width:"100%",borderCollapse:"collapse",minWidth:500}}>
-       <thead>
-         <tr style={{background:"#FAFBFD"}}>
-           <th style={{padding:"10px 14px",textAlign:"left",fontSize:12,color:C.muted,fontWeight:600,borderBottom:`1px solid ${C.border}`}}>Property</th>
-           {days.map((day,i)=><th key={i} style={{padding:"8px",textAlign:"center",borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,background:isToday(day)?"#EEF6FF":"#FAFBFD",minWidth:50}}>
-             <div style={{fontSize:10,color:C.muted,textTransform:"uppercase"}}>{day.toLocaleDateString("en-GB",{weekday:"short"})}</div>
-             <div style={{fontWeight:isToday(day)?800:500,fontSize:14,color:isToday(day)?C.coral:C.text}}>{day.getDate()}</div>
-           </th>)}
-         </tr>
-       </thead>
-       <tbody>
-         {properties.length===0&&<tr><td colSpan={8} style={{padding:32,textAlign:"center",color:C.muted}}>Add properties to see the diary</td></tr>}
-         {properties.map(prop=><tr key={prop.id} style={{borderBottom:`1px solid ${C.border}`}}>
-           <td style={{padding:"10px 14px"}}>
-             <div style={{display:"flex",alignItems:"center",gap:6}}>
-               <div style={{width:8,height:8,borderRadius:"50%",background:prop.color}}/>
-               <span style={{fontSize:12,fontWeight:600}}>{prop.name}</span>
-             </div>
-           </td>
-           {days.map((day,i)=>{
-             const bks=bookings.filter(b=>b.propertyId===prop.id&&new Date(b.checkin)<=day&&new Date(b.checkout)>day);
-             const isOut=bookings.some(b=>b.propertyId===prop.id&&sameDay(b.checkout,day));
-             return <td key={i} onClick={()=>bks[0]&&setSelB(bks[0])} style={{borderLeft:`1px solid ${C.border}`,background:isToday(day)?"#FAFEFF":"transparent",padding:3,verticalAlign:"top",cursor:bks[0]?"pointer":"default"}}>
-               {bks.map(b=><div key={b.id} style={{background:prop.color+"22",borderLeft:`3px solid ${prop.color}`,borderRadius:3,padding:"2px 4px",fontSize:10,fontWeight:600,color:prop.color}}>{b.guest.split(" ")[0]}</div>)}
-               {isOut&&<div style={{fontSize:8,color:C.coral,fontWeight:700,textAlign:"right"}}>OUT</div>}
-             </td>;
+   <div style={{background:C.surface,borderRadius:16,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:16}}>
+     <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:`1px solid ${C.border}`,background:"#FAFBFD"}}>
+       {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=><div key={d} style={{padding:"10px 0",textAlign:"center",fontSize:12,fontWeight:700,color:C.muted}}>{d}</div>)}
+     </div>
+     {Array.from({length:weeks},(_,wi)=>{
+       const lanes=getBarsForWeek(wi);
+       const rowHeight=Math.max(80,44+lanes.length*24+8);
+       return <div key={wi} style={{borderBottom:wi<weeks-1?`1px solid ${C.border}`:"none",position:"relative",height:rowHeight}}>
+         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",height:"100%"}}>
+           {Array.from({length:7},(_,di)=>{
+             const d=cellDate(wi*7+di);
+             const isTodayCell=d&&isToday(d);
+             const isSelected=d&&selDay&&sameDay(d,selDay);
+             return <div key={di} onClick={()=>d&&setSelDay(isSelected?null:d)}
+               style={{borderRight:di<6?`1px solid ${C.border}`:"none",padding:"6px 8px",cursor:d?"pointer":"default",background:isSelected?"#EEF6FF":isTodayCell?"#FFF5F5":"transparent",height:"100%"}}>
+               {d&&<div style={{width:28,height:28,borderRadius:"50%",background:isTodayCell?C.coral:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                 <span style={{fontSize:14,fontWeight:isTodayCell?700:400,color:isTodayCell?"#fff":C.text}}>{d.getDate()}</span>
+               </div>}
+             </div>;
            })}
-         </tr>)}
-       </tbody>
-     </table>
-   </div>
-
-   <SectionTitle>Upcoming checkouts — next 7 days</SectionTitle>
-   {upcoming.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:C.muted}}>🏖️ No checkouts in the next 7 days</div>}
-   <div style={{display:"flex",flexDirection:"column",gap:10}}>
-     {upcoming.map(b=>{
-       const prop=properties.find(p=>p.id===b.propertyId);
-       const hasClean=cleans.some(c=>c.bookingId===b.id);
-       return <Card key={b.id}>
-         <div style={{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
-           <div style={{width:8,height:8,borderRadius:"50%",background:prop?.color,marginTop:5,flexShrink:0}}/>
-           <div style={{flex:1}}>
-             <div style={{fontWeight:600}}>{b.guest} {b.rating&&<span style={{fontSize:12,color:C.amber}}>{"★".repeat(Number(b.rating))}</span>}</div>
-             <div style={{fontSize:13,color:C.textSoft}}>{prop?.name} · Checkout {fmt(b.checkout)}</div>
-             {b.notes&&<div style={{fontSize:12,color:C.muted,marginTop:4}}>📝 {b.notes}</div>}
-           </div>
-           <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-             {!hasClean&&<Btn onClick={()=>schedClean(b)} secondary small>+ Clean</Btn>}
-             {hasClean&&<span style={pill("pending")}>Scheduled</span>}
-             {!b.notified&&<Btn onClick={()=>notify(b)} small>Notify</Btn>}
-             {b.notified&&<span style={{...pill("complete"),fontSize:11}}>✓ Notified</span>}
-             <button onClick={()=>openEdit(b)} style={{background:"none",border:"none",fontSize:16,cursor:"pointer"}}>✏️</button>
-             <button onClick={()=>{if(window.confirm("Delete this booking?"))setBookings(bs=>bs.filter(x=>x.id!==b.id));}} style={{background:"none",border:"none",fontSize:16,cursor:"pointer"}}>🗑️</button>
-           </div>
          </div>
-       </Card>;
+         <div style={{position:"absolute",top:38,left:0,right:0,pointerEvents:"none"}}>
+           {lanes.map((lane,li)=>lane.map(({b,sc,ec})=>{
+             const prop=properties.find(p=>p.id===b.propertyId);
+             const cin=new Date(b.checkin);
+             const cout=new Date(b.checkout);
+             const trueStart=cellDate(wi*7+sc)&&sameDay(cellDate(wi*7+sc),cin);
+             const lastDay=new Date(cout);lastDay.setDate(lastDay.getDate()-1);
+             const trueEnd=cellDate(wi*7+ec)&&sameDay(cellDate(wi*7+ec),lastDay);
+             const showLabel=trueStart||sc===0;
+             return <div key={b.id+"_"+wi+"_"+li} style={{
+               position:"absolute",
+               left:`calc(${(sc/7)*100}% + ${trueStart?5:0}px)`,
+               width:`calc(${((ec-sc+1)/7)*100}% - ${(trueStart?5:0)+(trueEnd?5:0)}px)`,
+               top:li*24,height:22,
+               background:prop?.color||C.navy,
+               borderRadius:trueStart&&trueEnd?"11px":trueStart?"11px 0 0 11px":trueEnd?"0 11px 11px 0":"0",
+               display:"flex",alignItems:"center",paddingLeft:showLabel?8:4,overflow:"hidden",
+             }}>
+               {showLabel&&<span style={{fontSize:11,fontWeight:600,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                 {b.guest.split(" ")[0]}{prop?" · "+prop.name:""}
+               </span>}
+             </div>;
+           }))}
+         </div>
+       </div>;
      })}
    </div>
 
-   {selB&&<Modal onClose={()=>setSelB(null)} title="Booking details">
-     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-       {[["Guest",selB.guest],["Property",properties.find(p=>p.id===selB.propertyId)?.name],["Check-in",fmt(selB.checkin),C.mint],["Checkout",fmt(selB.checkout),C.coral]].map(([l,v,a])=><div key={l} style={{background:C.bg,borderRadius:10,padding:"10px 14px"}}>
-         <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:2}}>{l}</div>
-         <div style={{fontSize:14,fontWeight:700,color:a||C.text}}>{v}</div>
-       </div>)}
-     </div>
-     {selB.notes&&<div style={{background:C.bg,borderRadius:10,padding:"10px 14px",marginBottom:12}}><div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:2}}>Notes</div><div style={{fontSize:13}}>{selB.notes}</div></div>}
-     {selB.rating&&<div style={{fontSize:14,color:C.amber,marginBottom:12}}>{"★".repeat(Number(selB.rating))} Guest rating</div>}
-     <div style={{display:"flex",gap:8}}>
-       <Btn onClick={()=>{openEdit(selB);setSelB(null);}}>Edit booking</Btn>
-       <Btn onClick={()=>{if(window.confirm("Delete?"))setBookings(bs=>bs.filter(x=>x.id!==selB.id));setSelB(null);}} danger>Delete</Btn>
-     </div>
-   </Modal>}
+   <div style={{display:"flex",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+     {properties.map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.textSoft}}>
+       <div style={{width:12,height:8,borderRadius:3,background:p.color}}/>{p.name}
+     </div>)}
+   </div>
+
+   {selDay&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px 20px",marginBottom:16}}>
+     <div style={{fontWeight:700,fontSize:15,marginBottom:12}}>{selDay.toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</div>
+     {selDayBookings.length===0?<div style={{color:C.muted,fontSize:14}}>No bookings — available</div>:
+     <div style={{display:"flex",flexDirection:"column",gap:10}}>
+       {selDayBookings.map(b=>{
+         const prop=properties.find(p=>p.id===b.propertyId);
+         const isIn=sameDay(new Date(b.checkin),selDay);
+         const isOut=sameDay(new Date(b.checkout),selDay);
+         const hasClean=cleans.some(c=>c.bookingId===b.id);
+         return <div key={b.id} style={{background:C.bg,borderRadius:10,padding:"12px 14px",borderLeft:`4px solid ${prop?.color||C.navy}`}}>
+           <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+             <div>
+               <div style={{fontWeight:600}}>{b.guest}{b.rating&&<span style={{fontSize:12,color:C.amber,marginLeft:6}}>{"★".repeat(Number(b.rating))}</span>}</div>
+               <div style={{fontSize:13,color:C.textSoft}}>{prop?.name} · {fmt(b.checkin)} → {fmt(b.checkout)}</div>
+               {b.notes&&<div style={{fontSize:12,color:C.muted,marginTop:2}}>📝 {b.notes}</div>}
+             </div>
+             <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+               {isIn&&<span style={{...pill("complete"),fontSize:10}}>Check-in</span>}
+               {isOut&&<span style={{...pill("pending"),fontSize:10}}>Checkout</span>}
+               {isOut&&!hasClean&&<Btn onClick={()=>schedClean(b)} small secondary>+ Clean</Btn>}
+               {isOut&&!b.notified&&<Btn onClick={()=>notify(b)} small>Notify</Btn>}
+               <button onClick={()=>openEdit(b)} style={{background:"none",border:"none",fontSize:16,cursor:"pointer"}}>✏️</button>
+               <button onClick={()=>{if(window.confirm("Delete?"))setBookings(bs=>bs.filter(x=>x.id!==b.id));setSelDay(null);}} style={{background:"none",border:"none",fontSize:16,cursor:"pointer"}}>🗑️</button>
+             </div>
+           </div>
+         </div>;
+       })}
+     </div>}
+   </div>}
 
    {showAdd&&<Modal onClose={()=>{setShowAdd(false);setEditB(null);}} title={editB?"Edit booking":"Add booking"}>
      <div>
@@ -322,7 +368,7 @@ function DiaryView({properties,bookings,setBookings,cleans,setCleans,cleaners,sh
        <Field label="Checkout" value={bForm.checkout} onChange={v=>setBForm(f=>({...f,checkout:v}))} type="date"/>
        <Field label="Notes (parking, pets, early checkin...)" value={bForm.notes} onChange={v=>setBForm(f=>({...f,notes:v}))} placeholder="Any special notes..." multiline/>
        <div style={{marginBottom:12}}>
-         <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Guest rating (after checkout)</label>
+         <label style={{fontSize:12,fontWeight:600,color:C.textSoft,display:"block",marginBottom:4}}>Guest rating</label>
          <div style={{display:"flex",gap:8}}>
            {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setBForm(f=>({...f,rating:String(n)}))} style={{fontSize:24,background:"none",border:"none",cursor:"pointer",opacity:Number(bForm.rating)>=n?1:0.3}}>★</button>)}
            {bForm.rating&&<button onClick={()=>setBForm(f=>({...f,rating:""}))} style={{fontSize:12,color:C.muted,background:"none",border:"none",cursor:"pointer"}}>Clear</button>}
@@ -401,67 +447,103 @@ function CleansView({cleans,setCleans,properties,cleaners,bookings,showToast}){
 }
 
 // ── OCCUPANCY ──────────────────────────────────────────────────────────────────
+function DonutChart({pct,color,size=120}){
+ const r=46,cx=60,cy=60;
+ const circ=2*Math.PI*r;
+ const filled=(pct/100)*circ;
+ return <svg width={size} height={size} viewBox="0 0 120 120">
+   <circle cx={cx} cy={cy} r={r} fill="none" stroke="#E4E8F0" strokeWidth={14}/>
+   <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={14}
+     strokeDasharray={`${filled} ${circ-filled}`}
+     strokeDashoffset={circ/4}
+     strokeLinecap="round"/>
+   <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
+     style={{fontSize:22,fontWeight:800,fill:color}}>{pct}%</text>
+ </svg>;
+}
+
 function OccupancyView({properties,bookings}){
  const [yr,setYr]=useState(today.getFullYear());
  const [mo,setMo]=useState(today.getMonth());
- const daysInMonth=new Date(yr,mo+1,0).getDate();
- const days=Array.from({length:daysInMonth},(_,i)=>new Date(yr,mo,i+1));
+ const dim=new Date(yr,mo+1,0).getDate();
+ const days=Array.from({length:dim},(_,i)=>new Date(yr,mo,i+1));
+
+ function prevMonth(){let m=mo-1,y=yr;if(m<0){m=11;y--;}setMo(m);setYr(y);}
+ function nextMonth(){let m=mo+1,y=yr;if(m>11){m=0;y++;}setMo(m);setYr(y);}
 
  return <div>
-   <PH title="Occupancy" subtitle={MONTHS[mo]+" "+yr}>
+   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+     <h1 style={{fontSize:24,fontWeight:800}}>Occupancy</h1>
      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-       <button onClick={()=>{let m=mo-1,y=yr;if(m<0){m=11;y--;}setMo(m);setYr(y);}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",cursor:"pointer"}}>←</button>
-       <span style={{fontSize:14,fontWeight:600,minWidth:80,textAlign:"center"}}>{MONTHS[mo]} {yr}</span>
-       <button onClick={()=>{let m=mo+1,y=yr;if(m>11){m=0;y++;}setMo(m);setYr(y);}} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",cursor:"pointer"}}>→</button>
+       <button onClick={prevMonth} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,width:36,height:36,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+       <span style={{fontSize:14,fontWeight:600,minWidth:90,textAlign:"center"}}>{MONTHS[mo]} {yr}</span>
+       <button onClick={nextMonth} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,width:36,height:36,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
      </div>
-   </PH>
-   <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"auto"}}>
-     <table style={{width:"100%",borderCollapse:"collapse",minWidth:600}}>
-       <thead>
-         <tr style={{background:"#FAFBFD"}}>
-           <th style={{padding:"10px 14px",textAlign:"left",fontSize:12,color:C.muted,fontWeight:600,borderBottom:`1px solid ${C.border}`,minWidth:140}}>Property</th>
-           {days.map((day,i)=><th key={i} style={{padding:"6px 2px",textAlign:"center",borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,fontSize:10,fontWeight:600,color:isToday(day)?C.coral:C.muted,minWidth:28,background:isToday(day)?"#EEF6FF":"#FAFBFD"}}>
-             {day.getDate()}
-           </th>)}
-           <th style={{padding:"10px 8px",fontSize:12,fontWeight:700,color:C.text,textAlign:"right",borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`}}>Occ%</th>
-         </tr>
-       </thead>
-       <tbody>
-         {properties.length===0&&<tr><td colSpan={daysInMonth+2} style={{padding:32,textAlign:"center",color:C.muted}}>Add properties first</td></tr>}
-         {properties.map(prop=>{
-           const bookedDays=days.filter(day=>bookings.some(b=>b.propertyId===prop.id&&new Date(b.checkin)<=day&&new Date(b.checkout)>day)).length;
-           const occ=Math.round((bookedDays/daysInMonth)*100);
-           return <tr key={prop.id} style={{borderBottom:`1px solid ${C.border}`}}>
-             <td style={{padding:"10px 14px"}}>
-               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                 <div style={{width:8,height:8,borderRadius:"50%",background:prop.color}}/>
-                 <span style={{fontSize:12,fontWeight:600}}>{prop.name}</span>
-               </div>
-             </td>
-             {days.map((day,i)=>{
-               const booked=bookings.some(b=>b.propertyId===prop.id&&new Date(b.checkin)<=day&&new Date(b.checkout)>day);
-               const isIn=bookings.some(b=>b.propertyId===prop.id&&sameDay(b.checkin,day));
-               const isOut=bookings.some(b=>b.propertyId===prop.id&&sameDay(b.checkout,day));
-               let bg="transparent";
-               if(booked) bg=prop.color+"33";
-               if(isIn) bg=prop.color+"66";
-               if(isOut) bg=prop.color+"22";
-               return <td key={i} style={{borderLeft:`1px solid ${C.border}`,background:bg,height:36,padding:2,textAlign:"center"}}>
-                 {isIn&&<div style={{fontSize:8,color:prop.color,fontWeight:700}}>IN</div>}
-                 {isOut&&<div style={{fontSize:8,color:C.coral,fontWeight:700}}>OUT</div>}
-               </td>;
-             })}
-             <td style={{padding:"10px 8px",textAlign:"right",borderLeft:`1px solid ${C.border}`,fontWeight:700,fontSize:13,color:occ>=70?C.mint:occ>=50?C.amber:C.coral}}>{occ}%</td>
-           </tr>;
-         })}
-       </tbody>
-     </table>
    </div>
-   <div style={{display:"flex",gap:16,marginTop:16,fontSize:12,color:C.muted}}>
-     <span>■ Occupied</span><span style={{color:C.mint}}>IN = check-in day</span><span style={{color:C.coral}}>OUT = checkout day</span>
+
+   {properties.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:C.muted}}>🏠 Add properties to see occupancy</div>}
+
+   <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:20,marginBottom:32}}>
+     {properties.map(prop=>{
+       const bookedDays=days.filter(d=>bookings.some(b=>b.propertyId===prop.id&&new Date(b.checkin)<=d&&new Date(b.checkout)>d)).length;
+       const occ=Math.round((bookedDays/dim)*100);
+       const propBookings=bookings.filter(b=>b.propertyId===prop.id&&(
+         (new Date(b.checkin)>=new Date(yr,mo,1)&&new Date(b.checkin)<new Date(yr,mo+1,1))||
+         (new Date(b.checkout)>new Date(yr,mo,1)&&new Date(b.checkout)<=new Date(yr,mo+1,1))||
+         (new Date(b.checkin)<=new Date(yr,mo,1)&&new Date(b.checkout)>=new Date(yr,mo+1,1))
+       ));
+       return <div key={prop.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:"20px",display:"flex",flexDirection:"column",alignItems:"center"}}>
+         <div style={{width:"100%",display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+           <div style={{width:10,height:10,borderRadius:"50%",background:prop.color}}/>
+           <div style={{fontWeight:700,fontSize:14}}>{prop.name}</div>
+         </div>
+         <DonutChart pct={occ} color={occ>=70?C.mint:occ>=50?C.amber:C.coral} size={140}/>
+         <div style={{marginTop:16,width:"100%"}}>
+           <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6}}>
+             <span style={{color:C.muted}}>Nights booked</span>
+             <span style={{fontWeight:700}}>{bookedDays} / {dim}</span>
+           </div>
+           <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6}}>
+             <span style={{color:C.muted}}>Bookings</span>
+             <span style={{fontWeight:700}}>{propBookings.length}</span>
+           </div>
+           <div style={{display:"flex",justifyContent:"space-between",fontSize:13}}>
+             <span style={{color:C.muted}}>Nights free</span>
+             <span style={{fontWeight:700,color:C.muted}}>{dim-bookedDays}</span>
+           </div>
+         </div>
+         {propBookings.length>0&&<div style={{marginTop:12,width:"100%",borderTop:`1px solid ${C.border}`,paddingTop:10}}>
+           {propBookings.map(b=><div key={b.id} style={{fontSize:12,color:C.textSoft,marginBottom:4,display:"flex",justifyContent:"space-between"}}>
+             <span>{b.guest.split(" ")[0]}</span>
+             <span style={{color:C.muted}}>{fmtS(b.checkin)} – {fmtS(b.checkout)}</span>
+           </div>)}
+         </div>}
+       </div>;
+     })}
    </div>
+
+   {properties.length>1&&<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"16px 20px"}}>
+     <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>Portfolio average — {MONTHS[mo]}</div>
+     {(()=>{
+       const total=properties.reduce((s,prop)=>{
+         const bd=days.filter(d=>bookings.some(b=>b.propertyId===prop.id&&new Date(b.checkin)<=d&&new Date(b.checkout)>d)).length;
+         return s+bd;
+       },0);
+       const avg=Math.round((total/(properties.length*dim))*100);
+       return <div style={{display:"flex",alignItems:"center",gap:16}}>
+         <DonutChart pct={avg} color={avg>=70?C.mint:avg>=50?C.amber:C.coral} size={100}/>
+         <div>
+           <div style={{fontSize:28,fontWeight:800,color:avg>=70?C.mint:avg>=50?C.amber:C.coral}}>{avg}%</div>
+           <div style={{fontSize:13,color:C.muted}}>Average across {properties.length} properties</div>
+           <div style={{fontSize:13,color:C.muted,marginTop:2}}>{MONTHS[mo]} {yr}</div>
+         </div>
+       </div>;
+     })()}
+   </div>}
  </div>;
 }
+
+
 
 // ── EARNINGS ───────────────────────────────────────────────────────────────────
 function EarningsView({properties,earnings,setEarnings,showToast}){
